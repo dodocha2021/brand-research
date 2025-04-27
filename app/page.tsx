@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { FiSearch, FiClock } from 'react-icons/fi'
 import { toast } from 'react-hot-toast'
+import { useRouter } from 'next/navigation'
 
 const regions = [
   'North America',
@@ -24,6 +25,7 @@ export default function Home() {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRegion, setSelectedRegion] = useState('')
   const [selectedPlatform, setSelectedPlatform] = useState('')
+  const router = useRouter()
 
   const handleSearch = () => {
     if (!searchTerm.trim()) {
@@ -52,7 +54,7 @@ export default function Home() {
       {/* History Button */}
       <button
         className="absolute top-4 left-4 flex items-center gap-2 text-gray-600 hover:text-gray-900"
-        onClick={() => {/* TODO: 实现历史记录功能 */}}
+        onClick={() => window.location.href = '/history'}
       >
         <FiClock className="text-xl" />
         <span>Search History</span>
