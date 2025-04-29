@@ -22,6 +22,7 @@ export default function CompetitorResultPage() {
   const [showNextButton, setShowNextButton] = useState(true)
   const [showSaveEditor, setShowSaveEditor] = useState(false)
   const [showScrape, setShowScrape] = useState(false)
+  const [refreshingIdx, setRefreshingIdx] = useState<number | null>(null)
 
   useEffect(() => {
     if (!idsParam) return
@@ -253,6 +254,33 @@ export default function CompetitorResultPage() {
     toast.success('You can now edit the URL');
   }
 
+  // 单行刷新URL
+  const handleRefreshUrl = async (row: any, idx: number) => {
+    setRefreshingIdx(idx)
+    try {
+      const prompt = PLATFORM_PROMPTS[row.platform]
+        .replace('{{1.Competitor}}', row.competitor_name)
+        .replace('{{1.OriginalBrand}}', row.original_brand)
+        .replace('{{region}}', row.region)
+      const res = await fetch('/api/openai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini-search-preview',
+          max_tokens: 256,
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+      const data = await res.json()
+      const url = data?.choices?.[0]?.message?.content?.trim() || ''
+      setRows(prev => prev.map((r, i) => i === idx ? { ...r, competitor_url: url } : r))
+      toast.success('URL refreshed!')
+    } catch (e) {
+      toast.error('Failed to refresh URL')
+    }
+    setRefreshingIdx(null)
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
       <h1 className="text-3xl font-bold mb-8">Edit Competitors</h1>
@@ -265,6 +293,7 @@ export default function CompetitorResultPage() {
               <th className="px-4 py-2 text-left">Competitor</th>
               <th className="px-4 py-2 text-left">Platform</th>
               <th className="px-4 py-2 text-left">URL</th>
+              <th className="px-2 py-2 text-left"></th>
             </tr>
           </thead>
           <tbody>
@@ -339,6 +368,16 @@ export default function CompetitorResultPage() {
                       <span className="text-gray-400">-</span>
                     )
                   )}
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <button
+                    className="text-lg hover:text-blue-600 disabled:opacity-50"
+                    title="Refresh URL"
+                    disabled={refreshingIdx === idx || loading}
+                    onClick={() => handleRefreshUrl(row, idx)}
+                  >
+                    {refreshingIdx === idx ? '⏳' : '🔄'}
+                  </button>
                 </td>
               </tr>
             ))}

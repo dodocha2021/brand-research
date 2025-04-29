@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Brand Competitor Analysis Platform
 
-## Getting Started
+## Overview
 
-First, run the development server:
+This project is a full-stack web application for **brand competitor research, data enrichment, and AI-powered email generation**. It is designed to help marketing, sales, and research teams quickly analyze a brand's competitive landscape, enrich competitor data, and generate personalized outreach emails using advanced AI models (Anthropic Claude, OpenAI GPT-4o, etc.).
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+- **Brand Competitor Search**  
+  Enter a brand name and region to automatically research and summarize the top direct competitors using GPT-4o-mini and GPT-4o.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Competitor Data Enrichment**  
+  Edit, add, and manage competitor information (brand, region, competitor name, platform, URL, etc.) in a user-friendly table.  
+  Auto-fill competitor URLs using AI.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **History & Data Management**  
+  View and manage all previous competitor searches and results in a searchable history page.
 
-## Learn More
+- **AI-Powered Email Generation**  
+  Select a template, fill in brand and competitor data, and generate high-quality, data-driven outreach emails using Anthropic Claude.  
+  Supports custom templates and JSON data input.
 
-To learn more about Next.js, take a look at the following resources:
+- **Multi-language Support**  
+  All user-facing content is in English for international usability.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Tech Stack
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Frontend:** React (Next.js), Tailwind CSS
+- **Backend:** Next.js API routes, Supabase (PostgreSQL)
+- **AI Integration:** OpenAI GPT-4o, Anthropic Claude
+- **Other:** React Hot Toast, React Markdown
 
-## Deploy on Vercel
+## Quick Start
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd brand-research
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**  
+   Copy `.env.example` to `.env.local` and fill in your API keys for OpenAI, Anthropic, Supabase, etc.
+
+4. **Run the development server**
+   ```bash
+   npm run dev
+   ```
+
+5. **Open your browser**  
+   Visit [http://localhost:3000](http://localhost:3000) to use the app.
+
+## Folder Structure
+
+- `app/` — Main Next.js app, including pages and API routes
+- `lib/` — Utility functions and prompts
+- `public/` — Static assets
+- `README.md` — Project documentation
+
+## Screenshots
+
+> _You can add screenshots here to illustrate the workflow: competitor search, data editing, email generation, etc._
+
+## License
+
+MIT

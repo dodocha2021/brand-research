@@ -205,8 +205,8 @@ export default function Home() {
       <div className="w-full max-w-4xl">
         {loading && step !== 'edit' && (
           <div className="text-center text-blue-500 font-semibold text-xl py-8">
-            {step === 'gpt4o-mini' && 'Analyzing with GPT-4o-mini...'}
-            {step === 'gpt4o' && 'Summarizing with GPT-4o...'}
+            {step === 'gpt4o-mini' && 'Analyzing ...'}
+            {step === 'gpt4o' && 'Summarizing ...'}
           </div>
         )}
         {/* 可编辑竞争对手列表 */}

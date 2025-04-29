@@ -14,6 +14,7 @@ export default function CompetitorScrapePage() {
   const [editMode, setEditMode] = useState(false)
   const [showEditorButtons, setShowEditorButtons] = useState(false)
   const [editedRows, setEditedRows] = useState<any[]>([])
+  const [rowLoading, setRowLoading] = useState<{ [id: string]: boolean }>({})
 
   useEffect(() => {
     if (!idsParam) return
@@ -185,6 +186,106 @@ export default function CompetitorScrapePage() {
     setEditedRows([])
   }
 
+  // 单行刷新逻辑
+  const handleRefreshRow = async (row: any, idx: number) => {
+    setRowLoading(prev => ({ ...prev, [row.id]: true }))
+    let updatedRow = { ...row }
+    try {
+      if (row.platform === 'instagram') {
+        const res = await fetch('/api/apify/instagram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usernames: [row.competitor_url] })
+        })
+        const result = await res.json()
+        const info = Array.isArray(result) ? result[0] : null
+        updatedRow.logo = info?.profilePicUrl || ''
+        updatedRow.followers = info?.followersCount ?? ''
+      } else if (row.platform === 'linkedin') {
+        const res = await fetch('/api/apify/linkedin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier: row.competitor_url })
+        })
+        const result = await res.json()
+        const info = Array.isArray(result) ? result[0] : null
+        updatedRow.logo = info?.media?.logo_url || ''
+        updatedRow.followers = info?.stats?.follower_count ?? ''
+      } else if (row.platform === 'tiktok') {
+        const res = await fetch('/api/apify/tiktok', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            excludePinnedPosts: false,
+            profiles: [row.competitor_url],
+            resultsPerPage: 1,
+            shouldDownloadAvatars: false,
+            shouldDownloadCovers: true,
+            shouldDownloadSlideshowImages: false,
+            shouldDownloadSubtitles: false,
+            shouldDownloadVideos: false,
+            profileScrapeSections: ['videos'],
+            profileSorting: 'latest'
+          })
+        })
+        const result = await res.json()
+        const info = Array.isArray(result) ? result[0] : null
+        updatedRow.logo = info?.authorMeta?.avatar || ''
+        updatedRow.followers = info?.authorMeta?.fans ?? ''
+      } else if (row.platform === 'twitter') {
+        const res = await fetch('/api/apify/twitter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            maxItems: 1,
+            sort: 'Latest',
+            startUrls: [row.competitor_url]
+          })
+        })
+        const result = await res.json()
+        const info = Array.isArray(result) ? result[0] : null
+        updatedRow.logo = info?.author?.profilePicture || ''
+        updatedRow.followers = info?.author?.followers ?? ''
+      } else if (row.platform === 'youtube') {
+        const res = await fetch('/api/apify/youtube', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            maxResultStreams: 0,
+            maxResults: 1,
+            maxResultsShorts: 0,
+            sortVideosBy: 'POPULAR',
+            startUrls: [
+              {
+                url: row.competitor_url,
+                method: 'GET'
+              }
+            ]
+          })
+        })
+        const result = await res.json()
+        const info = Array.isArray(result) ? result[0] : null
+        updatedRow.logo = info?.aboutChannelInfo?.channelAvatarUrl || ''
+        updatedRow.followers = info?.aboutChannelInfo?.numberOfSubscribers ?? ''
+      }
+      // 更新本地rows
+      setRows(prevRows => prevRows.map((r, i) => (i === idx ? { ...r, logo: updatedRow.logo, followers: updatedRow.followers } : r)))
+      // 同步到 supabase
+      await supabase
+        .from('competitor_search_history')
+        .update({
+          logo: updatedRow.logo,
+          followers: updatedRow.followers
+        })
+        .eq('id', row.id)
+    } catch (e) {
+      // 可选：错误提示
+      console.error('单行刷新失败', e)
+    } finally {
+      setRowLoading(prev => ({ ...prev, [row.id]: false }))
+    }
+  }
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
       <h1 className="text-3xl font-bold mb-8">Scrape Competitors</h1>
@@ -207,6 +308,7 @@ export default function CompetitorScrapePage() {
               <th className="px-4 py-2 text-left">URL</th>
               <th className="px-4 py-2 text-left">Followers</th>
               <th className="px-4 py-2 text-left">Created At</th>
+              <th className="px-2 py-2 text-left"></th>
             </tr>
           </thead>
           <tbody>
@@ -231,7 +333,7 @@ export default function CompetitorScrapePage() {
                     <input
                       className="border rounded px-2 py-1 w-full"
                       value={row.logo || ''}
-                      placeholder="请输入logo链接"
+                      placeholder="Enter logo URL"
                       onChange={e => {
                         const newRows = [...editedRows]
                         newRows[idx].logo = e.target.value
@@ -258,7 +360,7 @@ export default function CompetitorScrapePage() {
                     <input
                       className="border rounded px-2 py-1 w-full"
                       value={row.followers || ''}
-                      placeholder="请输入粉丝数"
+                      placeholder="Enter followers count"
                       onChange={e => {
                         const newRows = [...editedRows]
                         newRows[idx].followers = e.target.value
@@ -279,6 +381,16 @@ export default function CompetitorScrapePage() {
                     value={row.created_at ? new Date(row.created_at).toLocaleString() : ''}
                     disabled
                   />
+                </td>
+                <td className="px-4 py-2">
+                  <button
+                    className="text-lg hover:text-blue-600 disabled:opacity-50"
+                    title="刷新数据"
+                    disabled={rowLoading[row.id] || loading}
+                    onClick={() => handleRefreshRow(row, idx)}
+                  >
+                    {rowLoading[row.id] ? '⏳' : '🔄'}
+                  </button>
                 </td>
               </tr>
             ))}
@@ -328,7 +440,7 @@ export default function CompetitorScrapePage() {
             className="px-6 py-3 rounded shadow-lg bg-gray-400 text-white font-bold hover:bg-gray-500"
             onClick={handleCancelEdit}
           >
-            取消编辑
+            Cancel Edit
           </button>
         )}
       </div>
