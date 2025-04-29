@@ -1,198 +1,177 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { FiSearch, FiClock } from 'react-icons/fi'
+import { toast } from 'react-hot-toast'
+import { supabase } from '@/lib/supabase'
+import { getAllSearches, getCompetitors } from '@/lib/supabase-utils'
 
-interface Competitor {
-  id: string
-  search_id: string
-  competitor_name: string
-  platform: string
-  competitor_url: string
-  fans_count: number | null
-}
-
-interface Search {
+interface SearchRecord {
   id: string
   original_brand: string
   region: string
-  status: string
+  competitor_name: string
   created_at: string
 }
 
-const PAGE_SIZE = 2 // 为了方便演示，示例每页2条
-
-// 示例假数据
-const mockSearches: Search[] = [
-  {
-    id: '1',
-    original_brand: 'Crocs',
-    region: 'North America',
-    status: 'completed',
-    created_at: '2024-04-25T10:00:00Z',
-  },
-  {
-    id: '2',
-    original_brand: 'Nike',
-    region: 'Europe',
-    status: 'completed',
-    created_at: '2024-04-24T09:00:00Z',
-  },
-  {
-    id: '3',
-    original_brand: 'Adidas',
-    region: 'Asia-Pacific',
-    status: 'completed',
-    created_at: '2024-04-23T08:00:00Z',
-  },
-]
-
-const mockCompetitors: Record<string, Competitor[]> = {
-  '1': [
-    {
-      id: 'c1',
-      search_id: '1',
-      competitor_name: 'Adidas',
-      platform: 'Instagram',
-      competitor_url: 'https://www.instagram.com/adidas',
-      fans_count: 29370861,
-    },
-    {
-      id: 'c2',
-      search_id: '1',
-      competitor_name: 'Deckers Brands',
-      platform: 'Instagram',
-      competitor_url: 'https://www.instagram.com/ugg',
-      fans_count: 2184056,
-    },
-    {
-      id: 'c3',
-      search_id: '1',
-      competitor_name: 'Crocs',
-      platform: 'Instagram',
-      competitor_url: 'https://www.instagram.com/crocs',
-      fans_count: 2694200,
-    },
-  ],
-  '2': [
-    {
-      id: 'c4',
-      search_id: '2',
-      competitor_name: 'Adidas',
-      platform: 'YouTube',
-      competitor_url: 'https://www.youtube.com/adidas',
-      fans_count: 5000000,
-    },
-    {
-      id: 'c5',
-      search_id: '2',
-      competitor_name: 'Puma',
-      platform: 'YouTube',
-      competitor_url: 'https://www.youtube.com/puma',
-      fans_count: 2000000,
-    },
-  ],
-  '3': [
-    {
-      id: 'c6',
-      search_id: '3',
-      competitor_name: 'Nike',
-      platform: 'TikTok',
-      competitor_url: 'https://www.tiktok.com/@nike',
-      fans_count: 10000000,
-    },
-  ],
-}
+const PAGE_SIZE = 20
 
 export default function HistoryPage() {
   const [page, setPage] = useState(1)
+  const [loading, setLoading] = useState(false)
+  const [grouped, setGrouped] = useState<Record<string, SearchRecord[]>>({})
+  const [brandList, setBrandList] = useState<string[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const total = mockSearches.length
-  const start = (page - 1) * PAGE_SIZE
-  const end = start + PAGE_SIZE
-  const searches = mockSearches.slice(start, end)
+  useEffect(() => {
+    setLoading(true)
+    getAllSearches()
+      .then((data: SearchRecord[]) => {
+        // 按 original_brand 分组
+        const group: Record<string, SearchRecord[]> = {}
+        data.forEach(item => {
+          if (!group[item.original_brand]) group[item.original_brand] = []
+          group[item.original_brand].push(item)
+        })
+        setGrouped(group)
+        setBrandList(Object.keys(group))
+      })
+      .catch((e) => {
+        toast.error('获取历史搜索失败: ' + (e.message || e))
+        setGrouped({})
+        setBrandList([])
+      })
+      .finally(() => setLoading(false))
+  }, [])
 
-  const handleExpand = (searchId: string) => {
-    setExpanded(expanded === searchId ? null : searchId)
-  }
+  // 分页
+  const pagedBrands = brandList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
     <main className="min-h-screen bg-gray-900 text-white p-8">
       <h1 className="text-3xl font-bold mb-8">Search History</h1>
-      <div className="space-y-4">
-        {searches.map((search) => (
-          <div key={search.id} className="bg-gray-800 rounded-lg shadow p-4">
-            <div
-              className="flex flex-wrap gap-4 items-center cursor-pointer"
-              onClick={() => handleExpand(search.id)}
-            >
-              <span className="font-semibold text-lg">Brand: {search.original_brand}</span>
-              <span className="text-gray-400">Region: {search.region}</span>
-              <span className="text-gray-400">Status: {search.status}</span>
-              <span className="text-gray-400">Time: {new Date(search.created_at).toLocaleString()}</span>
-              <span className="ml-auto text-blue-400 underline">
-                {expanded === search.id ? '收起' : '展开'}
-              </span>
-            </div>
-            {expanded === search.id && (
-              <div className="mt-4">
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm border-separate border-spacing-y-2">
-                    <thead>
-                      <tr className="bg-gray-700">
-                        <th className="px-4 py-2 text-left">Brand</th>
-                        <th className="px-4 py-2 text-left">Platform</th>
-                        <th className="px-4 py-2 text-left">Competitor</th>
-                        <th className="px-4 py-2 text-left">URL</th>
-                        <th className="px-4 py-2 text-left">Followers</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {mockCompetitors[search.id]?.length ? (
-                        mockCompetitors[search.id].map((c) => (
-                          <tr key={c.id} className="bg-gray-900 border-b border-gray-700">
-                            <td className="px-4 py-2">{search.original_brand}</td>
-                            <td className="px-4 py-2">{c.platform}</td>
-                            <td className="px-4 py-2">{c.competitor_name}</td>
-                            <td className="px-4 py-2">
-                              <a href={c.competitor_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 underline break-all">
-                                {c.competitor_url}
-                              </a>
-                            </td>
-                            <td className="px-4 py-2">{c.fans_count ?? '-'}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr><td colSpan={5} className="text-center text-gray-400 py-4">No competitors</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+      {loading ? (
+        <div className="text-center text-blue-400 py-12">Loading...</div>
+      ) : brandList.length === 0 ? (
+        <div className="text-center text-gray-400 py-12">No search history</div>
+      ) : (
+        <div className="space-y-4">
+          {pagedBrands.map((brand) => (
+            <div key={brand} className="bg-gray-800 rounded-lg shadow p-4">
+              <div
+                className="flex flex-wrap gap-4 items-center cursor-pointer"
+                onClick={() => setExpanded(expanded === brand ? null : brand)}
+              >
+                <span className="font-semibold text-lg">Brand: {brand}</span>
+                <span className="ml-auto text-blue-400 underline">
+                  {expanded === brand ? 'Collapse' : 'Expand'}
+                </span>
               </div>
-            )}
+              {expanded === brand && (
+                <div className="mt-4">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border-separate border-spacing-y-2">
+                      <thead>
+                        <tr className="bg-gray-700">
+                          {grouped[brand] && (() => {
+                            const keys = Object.keys(grouped[brand][0] || {})
+                              .filter(key => key !== 'id' && key !== 'original_brand');
+                            // 保证 competitor_name 和 region 顺序
+                            const competitorIdx = keys.indexOf('competitor_name');
+                            const regionIdx = keys.indexOf('region');
+                            let orderedKeys = keys;
+                            if (competitorIdx !== -1 && regionIdx !== -1) {
+                              // 先移除 region
+                              orderedKeys.splice(regionIdx, 1);
+                              // 插入到 competitor_name 后面
+                              orderedKeys.splice(competitorIdx + 1, 0, 'region');
+                            }
+                            return orderedKeys.map(key => (
+                              <th key={key} className="px-4 py-2 text-left">{key}</th>
+                            ));
+                          })()}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grouped[brand] ? (
+                          grouped[brand].map((item) => {
+                            const keys = Object.keys(item).filter(key => key !== 'id' && key !== 'original_brand');
+                            const competitorIdx = keys.indexOf('competitor_name');
+                            const regionIdx = keys.indexOf('region');
+                            let orderedKeys = keys;
+                            if (competitorIdx !== -1 && regionIdx !== -1) {
+                              orderedKeys.splice(regionIdx, 1);
+                              orderedKeys.splice(competitorIdx + 1, 0, 'region');
+                            }
+                            return (
+                              <tr key={item.id} className="bg-gray-900 border-b border-gray-700">
+                                {orderedKeys.map(key => (
+                                  <td
+                                    key={key}
+                                    className={`px-4 py-2 ${!(item as any)[key] ? 'bg-gray-800 text-gray-400' : ''}`}
+                                  >
+                                    {key === 'created_at' && (item as any)[key]
+                                      ? new Date((item as any)[key]).toLocaleString('en-US', { hour12: false })
+                                      : key === 'logo' && (item as any)[key]
+                                        ? (
+                                            <img
+                                              src={(item as any)[key]}
+                                              alt="logo"
+                                              style={{ width: 48, height: 48, objectFit: 'contain', borderRadius: 8, background: '#eee' }}
+                                              onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                            />
+                                          )
+                                        : key === 'competitor_url' && (item as any)[key]
+                                          ? (
+                                              <a
+                                                href={(item as any)[key]}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                style={{ color: '#4f8cff', textDecoration: 'underline', wordBreak: 'break-all' }}
+                                              >
+                                                {(item as any)[key]}
+                                              </a>
+                                            )
+                                          : ((item as any)[key] || '')}
+                                  </td>
+                                ))}
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td colSpan={grouped[brand] ? Object.keys(grouped[brand][0] || {}).length - 2 : 1} className="text-center text-gray-400 py-4">No competitors</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+          {/* 分页控件 */}
+          <div className="flex justify-center items-center gap-4 mt-8">
+            <button
+              className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+            >
+              Previous
+            </button>
+            <span>
+              Page {page} / {Math.ceil(brandList.length / PAGE_SIZE)}
+            </span>
+            <button
+              className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
+              onClick={() => setPage((p) => Math.min(Math.ceil(brandList.length / PAGE_SIZE), p + 1))}
+              disabled={page === Math.ceil(brandList.length / PAGE_SIZE)}
+            >
+              Next
+            </button>
           </div>
-        ))}
-        {/* 分页控件 */}
-        <div className="flex justify-center items-center gap-4 mt-8">
-          <button
-            className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-          >
-            上一页
-          </button>
-          <span>
-            第 {page} / {Math.ceil(total / PAGE_SIZE)} 页
-          </span>
-          <button
-            className="px-4 py-2 bg-gray-700 rounded disabled:opacity-50"
-            onClick={() => setPage((p) => Math.min(Math.ceil(total / PAGE_SIZE), p + 1))}
-            disabled={page === Math.ceil(total / PAGE_SIZE)}
-          >
-            下一页
-          </button>
         </div>
-      </div>
+      )}
     </main>
   )
 }

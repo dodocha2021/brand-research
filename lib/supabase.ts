@@ -3,14 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-// 创建 Supabase 客户端
+// 创建 Supabase 客户端（仅前端用 anon key）
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
-
-// 创建服务端 Supabase 客户端（使用服务角色密钥）
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 // 类型定义
 export type Database = {

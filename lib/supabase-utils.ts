@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin, Database } from './supabase'
+import { supabase, Database } from './supabase'
 
 // 创建新的搜索记录
 export async function createSearch(originalBrand: string, region: string) {
@@ -35,7 +35,7 @@ export async function updateSearchStatus(
   id: string,
   status: Database['public']['Tables']['searches']['Row']['status']
 ) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from('searches')
     .update({ status, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -51,7 +51,7 @@ export async function addCompetitor(
   searchId: string,
   competitor: Omit<Database['public']['Tables']['competitors']['Insert'], 'id' | 'search_id' | 'created_at' | 'updated_at'>
 ) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from('competitors')
     .insert([
       {
@@ -71,7 +71,7 @@ export async function updateCompetitorData(
   id: string,
   data: Partial<Database['public']['Tables']['competitors']['Update']>
 ) {
-  const { data: updatedData, error } = await supabaseAdmin
+  const { data: updatedData, error } = await supabase
     .from('competitors')
     .update({ ...data, updated_at: new Date().toISOString() })
     .eq('id', id)
@@ -84,7 +84,7 @@ export async function updateCompetitorData(
 
 // 添加分析报告
 export async function addReport(searchId: string, content: string) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from('reports')
     .insert([
       {
@@ -106,7 +106,7 @@ export async function addStatusUpdate(
   step: Database['public']['Tables']['status_updates']['Row']['step'],
   percentage?: number
 ) {
-  const { data, error } = await supabaseAdmin
+  const { data, error } = await supabase
     .from('status_updates')
     .insert([
       {
@@ -161,7 +161,7 @@ export async function getStatusUpdates(searchId: string) {
 // 获取所有搜索记录
 export async function getAllSearches() {
   const { data, error } = await supabase
-    .from('searches')
+    .from('competitor_search_history')
     .select('*')
     .order('created_at', { ascending: false })
 
