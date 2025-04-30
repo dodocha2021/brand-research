@@ -7,7 +7,7 @@ import { toast } from 'react-hot-toast'
 import { PLATFORM_PROMPTS } from '@/lib/prompts'
 
 const PLATFORM_OPTIONS = [
-  'instagram', 'linkedin', 'tiktok', 'twitter', 'youtube', 'all platform'
+  'youtube', 'instagram', 'linkedin', 'tiktok', 'twitter', 'all platform'
 ]
 const SPLIT_PLATFORMS = ['instagram', 'linkedin', 'tiktok', 'twitter', 'youtube']
 
@@ -282,53 +282,47 @@ export default function CompetitorResultPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
-      <h1 className="text-3xl font-bold mb-8">Edit Competitors</h1>
-      <div className="w-full max-w-4xl">
-        <table className="min-w-full text-sm border-separate border-spacing-y-2">
+    <div className="container">
+      <h1>Edit Competitors</h1>
+      <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 4px 10px rgba(0,0,0,0.1)', padding: 32, margin: '0 auto', marginTop: 32 }}>
+        <table className="result-table">
           <thead>
-            <tr className="bg-gray-200 text-gray-900">
-              <th className="px-4 py-2 text-left">Brand</th>
-              <th className="px-4 py-2 text-left">Region</th>
-              <th className="px-4 py-2 text-left">Competitor</th>
-              <th className="px-4 py-2 text-left">Platform</th>
-              <th className="px-4 py-2 text-left">URL</th>
-              <th className="px-2 py-2 text-left"></th>
+            <tr>
+              <th>Brand</th>
+              <th>Region</th>
+              <th>Competitor</th>
+              <th>Platform</th>
+              <th>URL</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row, idx) => (
-              <tr key={row.id || `${row.competitor_name}-${row.platform}-${idx}`} className="bg-white border-b border-gray-300">
-                <td className="px-4 py-2">
+              <tr key={row.id || `${row.competitor_name}-${row.platform}-${idx}`}> 
+                <td>
                   <input
-                    className="border rounded px-2 py-1 w-full"
                     value={row.original_brand || ''}
                     onChange={e => handleChange(idx, 'original_brand', e.target.value)}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   <input
-                    className="border rounded px-2 py-1 w-full"
                     value={row.region || ''}
                     onChange={e => handleChange(idx, 'region', e.target.value)}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   <input
-                    className="border rounded px-2 py-1 w-full"
                     value={row.competitor_name || ''}
                     onChange={e => handleChange(idx, 'competitor_name', e.target.value)}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   {showNextButton ? (
                     <select
-                      className={`border rounded px-2 py-1 w-full ${
-                        row.competitor_name === row.original_brand ? 'bg-gray-100' : ''
-                      }`}
                       value={row.competitor_name === row.original_brand ? 'all platform' : (row.platform || '')}
                       onChange={e => handleChange(idx, 'platform', e.target.value)}
                       disabled={row.competitor_name === row.original_brand}
@@ -340,16 +334,14 @@ export default function CompetitorResultPage() {
                     </select>
                   ) : (
                     <input
-                      className="border rounded px-2 py-1 w-full"
                       value={row.platform || ''}
                       disabled
                     />
                   )}
                 </td>
-                <td className="px-4 py-2 text-gray-400 bg-gray-100">
+                <td>
                   {editMode ? (
                     <input
-                      className="border rounded px-2 py-1 w-full"
                       value={row.competitor_url || ''}
                       onChange={e => handleChange(idx, 'competitor_url', e.target.value)}
                       placeholder="Enter or paste URL"
@@ -360,21 +352,20 @@ export default function CompetitorResultPage() {
                         href={row.competitor_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 underline truncate block"
                       >
                         {row.competitor_url}
                       </a>
                     ) : (
-                      <span className="text-gray-400">-</span>
+                      <span style={{ color: '#bbb' }}>-</span>
                     )
                   )}
                 </td>
-                <td className="px-2 py-2 text-center">
+                <td style={{ textAlign: 'center' }}>
                   <button
-                    className="text-lg hover:text-blue-600 disabled:opacity-50"
                     title="Refresh URL"
                     disabled={refreshingIdx === idx || loading}
                     onClick={() => handleRefreshUrl(row, idx)}
+                    style={{ opacity: refreshingIdx === idx || loading ? 0.5 : 1 }}
                   >
                     {refreshingIdx === idx ? '⏳' : '🔄'}
                   </button>
@@ -384,50 +375,57 @@ export default function CompetitorResultPage() {
           </tbody>
         </table>
         {editMode && (
-          <div className="text-sm text-blue-600 mt-2">You can manually input the URL.</div>
+          <div style={{ color: '#222', marginTop: 8, fontSize: 15, textAlign: 'center', fontWeight: 500 }}>
+            AI may make mistakes, so you might need to double-check and manually input the correct URL for competitors.
+          </div>
         )}
-        <div className="mt-6 flex justify-between items-center">
-          {showNextButton && (
+        {showNextButton && (
+          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ color: '#222', fontSize: 16 }}>
+              Please select a platform for each competitor and send to AI for analysis. You may also select "all platforms", but this may take more time.
+            </span>
             <button
-              className="px-8 py-3 bg-blue-600 text-white rounded shadow-lg hover:bg-blue-700 w-full"
+              className="search-btn"
+              style={{ maxWidth: 300, width: 180 }}
               onClick={handleNext}
               disabled={loading}
             >
               {loading ? 'Loading...' : 'Next'}
             </button>
-          )}
-          
-          {showSaveEditor && (
-            <>
-              <button
-                className="px-6 py-2 bg-gray-500 text-white rounded shadow hover:bg-gray-600"
-                onClick={handleEditor}
-              >
-                Editor
-              </button>
-              <button
-                className="px-8 py-3 bg-green-600 text-white rounded shadow-lg hover:bg-green-700"
-                onClick={handleSave}
-                disabled={loading}
-              >
-                {loading ? 'Loading...' : 'Save'}
-              </button>
-            </>
-          )}
-
-          {showScrape && (
+          </div>
+        )}
+        {showSaveEditor && (
+          <>
             <button
-              className="px-8 py-3 bg-orange-600 text-white rounded shadow-lg hover:bg-orange-700 ml-4"
-              onClick={() => {
-                const ids = rows.map(r => r.id).filter(Boolean).join(',')
-                router.push(`/competitor-scrape?ids=${ids}`)
-              }}
+              className="search-btn"
+              style={{ background: '#6b7280' }}
+              onClick={handleEditor}
             >
-              Scrape
+              Editor
             </button>
-          )}
-        </div>
+            <button
+              className="search-btn"
+              style={{ background: '#22c55e' }}
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {loading ? 'Loading...' : 'Save'}
+            </button>
+          </>
+        )}
+        {showScrape && (
+          <button
+            className="search-btn"
+            style={{ background: '#f59e42' }}
+            onClick={() => {
+              const ids = rows.map(r => r.id).filter(Boolean).join(',')
+              router.push(`/competitor-scrape?ids=${ids}`)
+            }}
+          >
+            Scrape
+          </button>
+        )}
       </div>
-    </main>
+    </div>
   )
 }

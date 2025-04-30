@@ -146,145 +146,98 @@ export default function EmailEditorPage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8">Email Editor</h1>
-        
-        <div className="bg-white rounded-lg shadow p-6 mb-6">
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Template
-            </label>
-            <div className="flex gap-4 mb-4">
-              <select
-                className="flex-1 border rounded-md px-3 py-2"
-                value={selectedTemplate}
-                onChange={(e) => {
-                  setSelectedTemplate(e.target.value as TemplateType)
-                  setIsCustom(false)
-                  if (!isCustom) {
-                    setCustomTemplate(EMAIL_TEMPLATES[e.target.value as TemplateType])
-                  }
-                }}
-                disabled={isCustom}
-              >
-                {Object.keys(EMAIL_TEMPLATES).map(template => (
-                  <option key={template} value={template}>
-                    {template}
-                  </option>
-                ))}
-              </select>
-              <button
-                className={`px-4 py-2 rounded-md ${
-                  isCustom
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-200 text-gray-700'
-                }`}
-                onClick={() => {
-                  setIsCustom(!isCustom)
-                  if (!isCustom) {
-                    setCustomTemplate(EMAIL_TEMPLATES[selectedTemplate])
-                  }
-                }}
-              >
-                Custom
-              </button>
-            </div>
+    <div className="container">
+      <h1>Email Editor</h1>
+      <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 4px 10px rgba(0,0,0,0.1)', padding: 32, margin: '0 auto', marginTop: 32 }}>
+        <div style={{ marginBottom: 32 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Template</label>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
+            <select
+              style={{ flex: 1, border: '1px solid #ccc', borderRadius: 10, padding: '10px 14px', fontSize: 16 }}
+              value={selectedTemplate}
+              onChange={(e) => {
+                setSelectedTemplate(e.target.value as TemplateType)
+                setIsCustom(false)
+                if (!isCustom) {
+                  setCustomTemplate(EMAIL_TEMPLATES[e.target.value as TemplateType])
+                }
+              }}
+              disabled={isCustom}
+            >
+              {Object.keys(EMAIL_TEMPLATES).map(template => (
+                <option key={template} value={template}>
+                  {template}
+                </option>
+              ))}
+            </select>
+            <button
+              className="search-btn"
+              style={{ width: 120, background: isCustom ? '#2563eb' : '#e0ecff', color: isCustom ? '#fff' : '#2563eb' }}
+              onClick={() => {
+                setIsCustom(!isCustom)
+                if (!isCustom) {
+                  setCustomTemplate(EMAIL_TEMPLATES[selectedTemplate])
+                }
+              }}
+            >
+              Custom
+            </button>
           </div>
-
-          <div className="space-y-4 mb-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Target Brand Name
-              </label>
-              <input
-                type="text"
-                className="w-full border rounded-md px-3 py-2"
-                value={targetBrandName}
-                onChange={(e) => setTargetBrandName(e.target.value)}
-                placeholder="e.g. Coca-Cola"
-              />
-            </div>
-
-            {selectedTemplate === 'YouTube Prospecting' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Contact Name (Optional)
-                </label>
-                <input
-                  type="text"
-                  className="w-full border rounded-md px-3 py-2"
-                  value={contactName}
-                  onChange={(e) => setContactName(e.target.value)}
-                  placeholder="e.g. John Smith"
-                />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Competitor Data (JSON format)
-              </label>
-              <textarea
-                className="w-full h-60 border rounded-md px-3 py-2 font-mono text-sm"
-                value={jsonData}
-                onChange={(e) => setJsonData(e.target.value)}
-                placeholder="Please enter competitor data in JSON format..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Template Content
-              </label>
-              <textarea
-                className={`w-full h-96 border rounded-md px-3 py-2 font-mono text-sm ${
-                  isCustom ? '' : 'bg-gray-50'
-                }`}
-                value={isCustom ? customTemplate : EMAIL_TEMPLATES[selectedTemplate]}
-                onChange={(e) => setCustomTemplate(e.target.value)}
-                disabled={!isCustom}
-                placeholder={isCustom ? "Enter your custom template..." : ""}
-              />
-            </div>
+        </div>
+        <div style={{ marginBottom: 32 }}>
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Target Brand Name</label>
+          <input
+            style={{ width: '100%', border: '1px solid #ccc', borderRadius: 10, padding: '10px 14px', fontSize: 16, marginBottom: 16 }}
+            value={targetBrandName}
+            onChange={e => setTargetBrandName(e.target.value)}
+          />
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Contact Name (optional)</label>
+          <input
+            style={{ width: '100%', border: '1px solid #ccc', borderRadius: 10, padding: '10px 14px', fontSize: 16, marginBottom: 16 }}
+            value={contactName}
+            onChange={e => setContactName(e.target.value)}
+          />
+          <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Competitor Data (JSON)</label>
+          <textarea
+            style={{ width: '100%', border: '1px solid #ccc', borderRadius: 10, padding: '10px 14px', fontSize: 16, minHeight: 120, fontFamily: 'monospace', marginBottom: 16 }}
+            value={jsonData}
+            onChange={e => setJsonData(e.target.value)}
+          />
+        </div>
+        {isCustom && (
+          <div style={{ marginBottom: 32 }}>
+            <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Custom Template</label>
+            <textarea
+              style={{ width: '100%', border: '1px solid #ccc', borderRadius: 10, padding: '10px 14px', fontSize: 16, minHeight: 120, fontFamily: 'monospace', marginBottom: 16 }}
+              value={customTemplate}
+              onChange={e => setCustomTemplate(e.target.value)}
+            />
           </div>
-
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 32 }}>
           <button
-            className={`w-full py-3 rounded-md font-medium ${
-              loading
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
+            className="search-btn"
+            style={{ maxWidth: 300, width: 180 }}
             onClick={handleGenerate}
             disabled={loading}
           >
-            {loading ? 'Waiting...' : 'Generate Email'}
+            {loading ? 'Generating...' : 'Generate Email'}
           </button>
         </div>
-
-        <div style={{ height: '10px', width: '100%' }} />
-
-        <div className="space-y-6">
-          {results.map((result, index) => (
-            <div
-              key={index}
-              className="w-full bg-gray-100 rounded-2xl shadow-lg p-8 min-h-[200px] max-w-full overflow-auto border border-gray-200"
-            >
-              <div className="flex justify-between items-center mb-4">
-                <div className="text-sm text-gray-500">
-                  Template: {result.template}
+        {results.length > 0 && (
+          <div style={{ marginTop: 32 }}>
+            <h2 style={{ fontWeight: 700, fontSize: 22, marginBottom: 16 }}>Generated Emails</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+              {results.map((result, idx) => (
+                <div key={idx} style={{ background: '#f9fafb', borderRadius: 16, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', padding: 24 }}>
+                  <div style={{ color: '#888', fontSize: 14, marginBottom: 8 }}>{result.timestamp} - {result.template}</div>
+                  <ReactMarkdown>{formatAIContent(result.content)}</ReactMarkdown>
                 </div>
-                <div className="text-sm text-gray-500">
-                  {result.timestamp}
-                </div>
-              </div>
-              <div className="prose prose-lg max-w-none whitespace-pre-wrap">
-                <ReactMarkdown>{formatAIContent(result.content)}</ReactMarkdown>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
-    </main>
+    </div>
   )
 } 

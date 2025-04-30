@@ -287,51 +287,49 @@ export default function CompetitorScrapePage() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
-      <h1 className="text-3xl font-bold mb-8">Scrape Competitors</h1>
-      <div className="w-full max-w-4xl">
-        <div className="mb-4 flex justify-end">
+    <div className="container">
+      <h1>Scrape Competitors</h1>
+      <div style={{ background: '#fff', borderRadius: 24, boxShadow: '0 4px 10px rgba(0,0,0,0.1)', padding: 32, margin: '0 auto', marginTop: 32 }}>
+        <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'flex-end' }}>
           <button
-            className="px-8 py-3 bg-blue-600 text-white rounded shadow-lg hover:bg-blue-700"
+            className="search-btn"
+            style={{ maxWidth: 300, width: 180 }}
             onClick={() => handleScrape(rows)}
             disabled={loading}
           >
             {loading ? 'Waiting minutes...' : 'Start Scraping'}
           </button>
         </div>
-        <table className="min-w-full text-sm border-separate border-spacing-y-2">
+        <table className="result-table">
           <thead>
-            <tr className="bg-gray-200 text-gray-900">
-              <th className="px-4 py-2 text-left">Competitor Name</th>
-              <th className="px-4 py-2 text-left">Platform</th>
-              <th className="px-4 py-2 text-left">Logo</th>
-              <th className="px-4 py-2 text-left">URL</th>
-              <th className="px-4 py-2 text-left">Followers</th>
-              <th className="px-4 py-2 text-left">Created At</th>
-              <th className="px-2 py-2 text-left"></th>
+            <tr>
+              <th>Competitor Name</th>
+              <th>Platform</th>
+              <th>Logo</th>
+              <th>URL</th>
+              <th>Followers</th>
+              <th>Created At</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             {(editMode ? editedRows : rows).map((row, idx) => (
-              <tr key={row.id || idx} className="bg-white border-b border-gray-300">
-                <td className="px-4 py-2">
+              <tr key={row.id || idx}>
+                <td>
                   <input
-                    className="border rounded px-2 py-1 w-full"
                     value={row.competitor_name || ''}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   <input
-                    className="border rounded px-2 py-1 w-full"
                     value={row.platform || ''}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   {editMode ? (
                     <input
-                      className="border rounded px-2 py-1 w-full"
                       value={row.logo || ''}
                       placeholder="Enter logo URL"
                       onChange={e => {
@@ -342,23 +340,20 @@ export default function CompetitorScrapePage() {
                     />
                   ) : (
                     <input
-                      className={`border rounded px-2 py-1 w-full ${row.logo ? '' : 'bg-gray-100 text-gray-400'}`}
                       value={row.logo || ''}
                       disabled
                     />
                   )}
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   <input
-                    className={`border rounded px-2 py-1 w-full ${row.competitor_url ? '' : 'bg-gray-100 text-gray-400'}`}
                     value={row.competitor_url || ''}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   {editMode ? (
                     <input
-                      className="border rounded px-2 py-1 w-full"
                       value={row.followers || ''}
                       placeholder="Enter followers count"
                       onChange={e => {
@@ -369,25 +364,23 @@ export default function CompetitorScrapePage() {
                     />
                   ) : (
                     <input
-                      className={`border rounded px-2 py-1 w-full ${row.followers ? '' : 'bg-gray-100 text-gray-400'}`}
                       value={row.followers !== undefined && row.followers !== null && row.followers !== '' ? row.followers : ''}
                       disabled
                     />
                   )}
                 </td>
-                <td className="px-4 py-2">
+                <td>
                   <input
-                    className={`border rounded px-2 py-1 w-full ${row.created_at ? '' : 'bg-gray-100 text-gray-400'}`}
                     value={row.created_at ? new Date(row.created_at).toLocaleString() : ''}
                     disabled
                   />
                 </td>
-                <td className="px-4 py-2">
+                <td style={{ textAlign: 'center' }}>
                   <button
-                    className="text-lg hover:text-blue-600 disabled:opacity-50"
                     title="刷新数据"
                     disabled={rowLoading[row.id] || loading}
                     onClick={() => handleRefreshRow(row, idx)}
+                    style={{ opacity: rowLoading[row.id] || loading ? 0.5 : 1 }}
                   >
                     {rowLoading[row.id] ? '⏳' : '🔄'}
                   </button>
@@ -396,54 +389,57 @@ export default function CompetitorScrapePage() {
             ))}
           </tbody>
         </table>
-      </div>
-      <div className="mt-6 flex justify-end w-full max-w-4xl space-x-4">
-        <button
-          className={`px-8 py-3 rounded shadow-lg text-white font-bold
-            ${loading ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
-          disabled={loading}
-          onClick={async () => {
-            if (loading) return
-            if (editMode) {
-              await handleSave(editedRows)
-            } else {
-              await handleSave(rows)
-            }
-          }}
-        >
-          {loading ? 'Loading...' : 'Save'}
-        </button>
-        {showEditorButtons && !editMode && (
-          <>
-            <button
-              className="px-6 py-3 rounded shadow-lg bg-blue-600 text-white font-bold hover:bg-blue-700"
-              onClick={() => {
-                setEditMode(true)
-                setEditedRows(rows.map(r => ({ ...r })))
-              }}
-            >
-              Editor
-            </button>
-            <button
-              className="px-6 py-3 rounded shadow-lg bg-purple-600 text-white font-bold hover:bg-purple-700"
-              onClick={() => {
-                const ids = rows.map(r => r.id).filter(Boolean).join(',')
-                router.push(`/email-editor?ids=${ids}`)
-              }}
-            >
-              Email
-            </button>
-          </>
-        )}
-        {editMode && (
+        <div style={{ marginTop: 32, display: 'flex', justifyContent: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <button
-            className="px-6 py-3 rounded shadow-lg bg-gray-400 text-white font-bold hover:bg-gray-500"
-            onClick={handleCancelEdit}
+            className="search-btn"
+            style={{ background: loading ? '#a3a3a3' : '#22c55e', maxWidth: 300, width: 180 }}
+            disabled={loading}
+            onClick={async () => {
+              if (loading) return
+              if (editMode) {
+                await handleSave(editedRows)
+              } else {
+                await handleSave(rows)
+              }
+            }}
           >
-            Cancel Edit
+            {loading ? 'Loading...' : 'Save'}
           </button>
-        )}
+          {showEditorButtons && !editMode && (
+            <>
+              <button
+                className="search-btn"
+                style={{ background: '#2563eb', maxWidth: 180 }}
+                onClick={() => {
+                  setEditMode(true)
+                  setEditedRows(rows.map(r => ({ ...r })))
+                }}
+              >
+                Editor
+              </button>
+              <button
+                className="search-btn"
+                style={{ background: '#a855f7', maxWidth: 180 }}
+                onClick={() => {
+                  const ids = rows.map(r => r.id).filter(Boolean).join(',')
+                  router.push(`/email-editor?ids=${ids}`)
+                }}
+              >
+                Email
+              </button>
+            </>
+          )}
+          {editMode && (
+            <button
+              className="search-btn"
+              style={{ background: '#6b7280', maxWidth: 180 }}
+              onClick={handleCancelEdit}
+            >
+              Cancel Edit
+            </button>
+          )}
+        </div>
       </div>
-    </main>
+    </div>
   )
 }

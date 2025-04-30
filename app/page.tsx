@@ -145,122 +145,102 @@ export default function Home() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-start relative p-0">
-      {/* Search History Button */}
-      <button
-        className="absolute top-8 left-8 px-8 py-4 bg-blue-200 text-blue-900 font-bold text-lg rounded-lg shadow-lg hover:bg-blue-300 transition-all"
-        onClick={() => window.location.href = '/history'}
-        style={{ minWidth: 160 }}
-      >
-        Search History
-      </button>
-
-      {/* Title */}
-      <h1 className="mt-24 mb-12 text-5xl font-light text-center text-gray-900 tracking-wide">
-        Brand Competitor Analysis
-      </h1>
-
-      {/* Search Section */}
-      <div className="flex w-full max-w-4xl items-start justify-center gap-8 mb-12">
-        {/* Search Box */}
-        <div className="flex-1">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Enter brand name..."
-            className="w-full px-8 py-6 text-2xl border border-gray-300 rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-400 bg-blue-100 text-gray-900 shadow"
-            disabled={loading || step !== 'idle'}
-            style={{ minHeight: 72 }}
-          />
-        </div>
-        {/* Region Dropdown */}
+    <div className="container">
+      <h1>Brand Competitor Analysis</h1>
+      {/* 搜索行：输入框和下拉菜单同一行 */}
+      <div className="search-row">
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Enter brand name..."
+          disabled={loading || step !== 'idle'}
+        />
         <select
           value={region}
           onChange={e => setRegion(e.target.value)}
-          className="px-8 py-6 text-2xl border border-gray-300 rounded-lg bg-blue-100 text-gray-900 shadow font-bold"
           disabled={loading || step !== 'idle'}
-          style={{ minWidth: 220, minHeight: 72 }}
         >
           {regions.map(r => (
             <option key={r.value} value={r.value}>{r.label}</option>
           ))}
         </select>
-        {/* Search Button */}
+      </div>
+      {/* Search按钮单独一行 */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
         <button
+          className="search-btn"
           onClick={handleSearch}
-          className={`flex-shrink-0 px-8 py-6 bg-blue-200 text-blue-900 font-bold text-2xl rounded-lg shadow-lg ml-2 hover:bg-blue-300 transition-all flex items-center justify-center ${loading || !searchTerm.trim() || !region || step !== 'idle' ? 'opacity-50 cursor-not-allowed' : ''}`}
           disabled={loading || !searchTerm.trim() || !region || step !== 'idle'}
-          style={{ minWidth: 160, minHeight: 72 }}
+          style={{ maxWidth: 300 }}
         >
-          {loading && step !== 'edit' ? (
-            <span className="animate-spin mr-2">⏳</span>
-          ) : (
-            'Search'
-          )}
+          {loading && step !== 'edit' ? '⏳' : 'Search'}
+        </button>
+        <button
+          className="search-btn"
+          style={{ width: 120, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
+          onClick={() => window.location.href = '/history'}
+        >
+          Search History
         </button>
       </div>
-
-      {/* Result Section */}
-      <div className="w-full max-w-4xl">
+      {/* 结果区域 */}
+      <div style={{ marginTop: 32 }}>
         {loading && step !== 'edit' && (
-          <div className="text-center text-blue-500 font-semibold text-xl py-8">
+          <div style={{ textAlign: 'center', color: '#2563eb', fontWeight: 600, fontSize: 20, padding: 24 }}>
             {step === 'gpt4o-mini' && 'Analyzing ...'}
             {step === 'gpt4o' && 'Summarizing ...'}
           </div>
         )}
         {/* 可编辑竞争对手列表 */}
         {step === 'edit' && (
-          <div className="bg-blue-100 p-8 rounded-3xl shadow-lg text-black text-xl min-h-[120px] flex flex-col items-center">
-            <div className="w-full flex flex-col gap-3 mb-4">
-              {competitors.map((c, idx) => (
-                <div key={idx} className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    value={c}
-                    onChange={e => handleCompetitorChange(idx, e.target.value)}
-                    className="border rounded px-3 py-2 flex-1"
-                    placeholder={`Competitor ${idx + 1}`}
-                  />
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 24 }}>
+            {competitors.map((c, idx) => (
+              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <input
+                  type="text"
+                  value={c}
+                  onChange={e => handleCompetitorChange(idx, e.target.value)}
+                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #ccc', fontSize: 16 }}
+                  placeholder={`Competitor ${idx + 1}`}
+                />
+                {idx > 0 && (
                   <button
-                    type="button"
                     onClick={() => handleRemoveCompetitor(idx)}
-                    className="text-red-500 text-xl px-2"
-                    aria-label="Delete"
+                    style={{ color: '#f87171', fontSize: 20, border: 'none', background: 'none', cursor: 'pointer' }}
                   >×</button>
-                </div>
-              ))}
+                )}
+              </div>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
               <button
-                type="button"
                 onClick={handleAddCompetitor}
-                className="text-blue-500 text-2xl px-2 mt-2"
-                aria-label="Add"
+                style={{ color: '#2563eb', fontSize: 22, border: 'none', background: 'none', cursor: 'pointer' }}
               >＋</button>
+              <span style={{ color: '#666', fontSize: 15 }}>
+                AI can make mistakes. Please double-check, add, delete, or edit competitors above before pressing Next.
+              </span>
             </div>
-            <div className="mt-3 text-yellow-600 text-sm">
-              You can change & add competitors. Please click "Next" to confirm, we will scrape competitors' information.
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <button
+                onClick={handleNext}
+                style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 24px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}
+                disabled={loading}
+              >Next</button>
             </div>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="mt-4 px-6 py-2 bg-blue-600 text-white rounded"
-              disabled={loading}
-            >
-              Next
-            </button>
           </div>
         )}
-        {/* 原始只读结果（如果有） */}
+        {/* 只读结果 */}
         {result && step !== 'edit' && (
-          <div className="bg-blue-100 p-8 rounded-3xl shadow-lg text-black text-xl min-h-[120px] flex items-center justify-center">
-            <ol className="list-decimal pl-6 text-left inline-block">
+          <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+            <ol style={{ paddingLeft: 24 }}>
               {result.split(',').map((item, idx) => (
-                <li key={idx}>{item.trim()}</li>
+                <li key={idx} style={{ fontSize: 18, color: '#222', marginBottom: 8 }}>{item.trim()}</li>
               ))}
             </ol>
           </div>
         )}
       </div>
-    </main>
+    </div>
   )
 }
