@@ -7,6 +7,10 @@ export async function POST(req: NextRequest) {
   }
 
   const input = await req.json()
+  // 保证 identifier 为数组格式
+  if (input.identifier && !Array.isArray(input.identifier)) {
+    input.identifier = [input.identifier]
+  }
   try {
     const res = await fetch(
       `https://api.apify.com/v2/actor-tasks/ai.labs~linkedin-company-detail-brand/run-sync-get-dataset-items?token=${apiKey}`,

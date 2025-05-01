@@ -374,8 +374,8 @@ export default function CompetitorResultPage() {
             ))}
           </tbody>
         </table>
-        {editMode && (
-          <div style={{ color: '#222', marginTop: 8, fontSize: 15, textAlign: 'center', fontWeight: 500 }}>
+        {showSaveEditor && (
+          <div style={{ color: '#222', marginTop: 8, marginBottom: 16, fontSize: 18, textAlign: 'center' }}>
             AI may make mistakes, so you might need to double-check and manually input the correct URL for competitors.
           </div>
         )}

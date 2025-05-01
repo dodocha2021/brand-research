@@ -11,7 +11,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'idle' | 'gpt4o-mini' | 'gpt4o' | 'edit'>('idle')
   const router = useRouter()
-  const [region, setRegion] = useState('')
+  const [region, setRegion] = useState('Global')
   const [competitors, setCompetitors] = useState<string[]>([])
   const regions = [
     { value: '', label: 'Select Region' },
@@ -159,7 +159,7 @@ export default function Home() {
         <select
           value={region}
           onChange={e => setRegion(e.target.value)}
-          disabled={loading || step !== 'idle'}
+          disabled={loading}
         >
           {regions.map(r => (
             <option key={r.value} value={r.value}>{r.label}</option>
@@ -171,7 +171,7 @@ export default function Home() {
         <button
           className="search-btn"
           onClick={handleSearch}
-          disabled={loading || !searchTerm.trim() || !region || step !== 'idle'}
+          disabled={loading || !searchTerm.trim() || !region}
           style={{ maxWidth: 300 }}
         >
           {loading && step !== 'edit' ? '⏳' : 'Search'}
