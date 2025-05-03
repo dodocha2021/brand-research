@@ -74,20 +74,17 @@ export default function CompetitorResultPage() {
   const handleNext = async () => {
     setLoading(true)
     try {
-      // 在校验前，自动为关键词行赋值 platform
       const fixedRows = rows.map(row =>
         row.competitor_name === row.original_brand
           ? { ...row, platform: 'all platform' }
           : row
-      );
-      // 验证每一行是否都有platform数据
-      const emptyPlatformRows = fixedRows.filter(row => !row.platform);
+      )
+      const emptyPlatformRows = fixedRows.filter(row => !row.platform)
       if (emptyPlatformRows.length > 0) {
-        toast.error('Please select a platform for all rows');
-        setLoading(false);
-        return;
+        toast.error('Please select a platform for all rows')
+        setLoading(false)
+        return
       }
-      // 1. 删除数据库中原始 all platform 行
       for (const row of fixedRows) {
         if ((row.platform === 'all platform' || !row.platform) && row.id) {
           await supabase
@@ -96,33 +93,29 @@ export default function CompetitorResultPage() {
             .eq('id', row.id)
         }
       }
-      // 1. 处理 all platform 拆分
       let processedRows: any[] = []
-      // 找出不是 all platform 的行
-      const nonAllPlatformRows = fixedRows.filter(row => row.platform !== 'all platform');
-      // 处理 all platform 行拆分
       fixedRows.forEach(row => {
         if (row.platform === 'all platform') {
           SPLIT_PLATFORMS.forEach(p => {
             processedRows.push({
               ...row,
               platform: p,
-              id: undefined,  // 拆分后的行是新行，没有ID
+              id: undefined,
               competitor_url: ''
-            });
-          });
+            })
+          })
         } else {
-          processedRows.push(row);
+          processedRows.push(row)
         }
-      });
-      // 2. 请求GPT获取URL
-      const newRows = [];
+      })
+
+      const newRows = []
       for (const row of processedRows) {
         const prompt = PLATFORM_PROMPTS[row.platform]
           .replace('{{1.Competitor}}', row.competitor_name)
           .replace('{{1.OriginalBrand}}', row.original_brand)
-          .replace('{{region}}', row.region);
-        let url = '';
+          .replace('{{region}}', row.region)
+        let url = ''
         try {
           const res = await fetch('/api/openai', {
             method: 'POST',
@@ -132,26 +125,25 @@ export default function CompetitorResultPage() {
               max_tokens: 256,
               messages: [{ role: 'user', content: prompt }]
             })
-          });
-          const data = await res.json();
-          url = data?.choices?.[0]?.message?.content?.trim() || '';
+          })
+          const data = await res.json()
+          url = data?.choices?.[0]?.message?.content?.trim() || ''
         } catch {}
         newRows.push({
           ...row,
           competitor_url: url
-        });
+        })
       }
-      
-      setRows(newRows);
-      // 切换按钮状态
-      setShowNextButton(false);
-      setShowSaveEditor(true);
-      toast.success('URLs have been auto-filled');
+
+      setRows(newRows)
+      setShowNextButton(false)
+      setShowSaveEditor(true)
+      toast.success('URLs have been auto-filled')
     } catch (e) {
-      console.error('Auto fill failed:', e);
-      toast.error('Auto fill failed');
+      console.error('Auto fill failed:', e)
+      toast.error('Auto fill failed')
     }
-    setLoading(false);
+    setLoading(false)
   }
 
   // Save: 更新数据库
@@ -159,49 +151,40 @@ export default function CompetitorResultPage() {
     setLoading(true)
     try {
       let updatedRows: any[] = []
-      
-      // 查找所有all platform原始行的ID，稍后需要删除
+
       const allPlatformIdsToDelete = rows
-        .filter(row => !row.id) // 筛选出没有ID的行
+        .filter(row => !row.id)
         .map(row => {
-          // 找到原始的all platform行
-          const originalRows = rows.filter(r => 
-            r.id && // 有ID
-            r.competitor_name === row.competitor_name && // 相同竞争对手
-            r.original_brand === row.original_brand && // 相同品牌
-            r.platform === 'all platform' // 平台为all platform
-          );
-          return originalRows.length > 0 ? originalRows[0].id : null;
+          const originalRows = rows.filter(r =>
+            r.id &&
+            r.competitor_name === row.competitor_name &&
+            r.original_brand === row.original_brand &&
+            r.platform === 'all platform'
+          )
+          return originalRows.length > 0 ? originalRows[0].id : null
         })
-        .filter(id => id) // 过滤掉null
-        .filter((id, index, self) => self.indexOf(id) === index); // 去重
-      
-      console.log('需要删除的all platform IDs:', allPlatformIdsToDelete);
-      
-      // 1. 删除all platform原始行
+        .filter(id => id)
+        .filter((id, index, self) => self.indexOf(id) === index)
+
       if (allPlatformIdsToDelete.length > 0) {
         const { error: deleteError } = await supabase
           .from('competitor_search_history')
           .delete()
-          .in('id', allPlatformIdsToDelete);
-          
+          .in('id', allPlatformIdsToDelete)
         if (deleteError) {
-          console.error('Failed to delete all platform rows:', deleteError);
+          console.error('Failed to delete all platform rows:', deleteError)
         } else {
-          console.log('Successfully deleted all platform original rows');
+          console.log('Successfully deleted all platform original rows')
         }
       }
-      
-      // 2. 处理每一行数据的插入或更新
+
       for (const row of rows) {
-        // 跳过没有platform或competitor_url的行
         if (!row.platform || !row.competitor_url) {
-          console.log('Skip empty row:', row);
-          continue;
+          console.log('Skip empty row:', row)
+          continue
         }
-        
+
         if (!row.id) {
-          // 新行，需要插入
           const { data: inserted, error } = await supabase
             .from('competitor_search_history')
             .insert([{
@@ -212,14 +195,13 @@ export default function CompetitorResultPage() {
               competitor_url: row.competitor_url
             }])
             .select()
-          if (!error && inserted && inserted[0]) {
+          if (!error && inserted?.[0]) {
             updatedRows.push(inserted[0])
             console.log('Inserted:', inserted[0])
           } else if (error) {
-            console.error('Failed to insert new row:', error);
+            console.error('Failed to insert new row:', error)
           }
         } else {
-          // 现有行，需要更新
           const { data: updated, error } = await supabase
             .from('competitor_search_history')
             .update({
@@ -228,22 +210,22 @@ export default function CompetitorResultPage() {
             })
             .eq('id', row.id)
             .select()
-          if (!error && updated && updated[0]) {
+          if (!error && updated?.[0]) {
             updatedRows.push(updated[0])
             console.log('Updated:', updated[0])
           } else if (error) {
-            console.error('Failed to update row:', error);
+            console.error('Failed to update row:', error)
           }
         }
       }
-      
+
       setRows(updatedRows)
       setEditMode(false)
       setShowScrape(true)
-      toast.success('Saved!');
+      toast.success('Saved!')
     } catch (e) {
-      console.error('Error occurred while saving:', e);
-      toast.error('Save failed');
+      console.error('Error occurred while saving:', e)
+      toast.error('Save failed')
     }
     setLoading(false)
   }
@@ -251,29 +233,27 @@ export default function CompetitorResultPage() {
   // Editor: 进入手动编辑URL模式
   const handleEditor = () => {
     setEditMode(true)
-    toast.success('You can now edit the URL');
+    toast.success('You can now edit the URL')
   }
 
-  // 单行刷新URL
+  // 单行刷新URL —— 改为使用 google-gpt 搜索并填入
   const handleRefreshUrl = async (row: any, idx: number) => {
     setRefreshingIdx(idx)
     try {
-      const prompt = PLATFORM_PROMPTS[row.platform]
-        .replace('{{1.Competitor}}', row.competitor_name)
-        .replace('{{1.OriginalBrand}}', row.original_brand)
-        .replace('{{region}}', row.region)
-      const res = await fetch('/api/openai', {
+      const res = await fetch('/api/google-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'gpt-4o-mini-search-preview',
-          max_tokens: 256,
-          messages: [{ role: 'user', content: prompt }]
+          brand: row.competitor_name,
+          platform: row.platform,
+          region: row.region
         })
       })
       const data = await res.json()
-      const url = data?.choices?.[0]?.message?.content?.trim() || ''
-      setRows(prev => prev.map((r, i) => i === idx ? { ...r, competitor_url: url } : r))
+      const url = data?.url || ''
+      setRows(prev =>
+        prev.map((r, i) => i === idx ? { ...r, competitor_url: url } : r)
+      )
       toast.success('URL refreshed!')
     } catch (e) {
       toast.error('Failed to refresh URL')
@@ -298,7 +278,7 @@ export default function CompetitorResultPage() {
           </thead>
           <tbody>
             {rows.map((row, idx) => (
-              <tr key={row.id || `${row.competitor_name}-${row.platform}-${idx}`}> 
+              <tr key={row.id || `${row.competitor_name}-${row.platform}-${idx}`}>
                 <td>
                   <input
                     value={row.original_brand || ''}
@@ -394,7 +374,7 @@ export default function CompetitorResultPage() {
             </button>
           </div>
         )}
-        {showSaveEditor && (
+        {showSaveEditor && (  
           <>
             <button
               className="search-btn"

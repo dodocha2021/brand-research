@@ -1,9 +1,9 @@
 export const PLATFORM_PROMPTS: Record<string, string> = {
-  youtube: `Please Find me the Right Youtube account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.OriginalBrand}} are active. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at youtube.com/powerade. From there a general search, for example do a search for 'powerade beverage youtube'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.youtube.com/@joerogan, https://www.youtube.com/channel/UCRHa2-Ajldj8yVUBcwtn_VQ). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
-  twitter: `Please Find me the Right Twitter account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.OriginalBrand}} are active. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at twitter.com/powerade. From there a general search, for example do a search for 'powerade beverage twitter'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://twitter.com/cocacola, https://x.com/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
-  linkedin: `Please Find me the Right LinkedIn account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} is active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at linkedin.com/company/powerade. From there a general search, for example do a search for 'powerade beverage linkedin'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.linkedin.com/company/coca-cola/, https://linkedin.com/company/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
-  instagram: `Please Find me the Right Instagram account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.OriginalBrand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at instagram.com/powerade. From there a general search, for example do a search for 'powerade beverage instagram'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.instagram.com/cocacola/, https://instagram.com/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
-  tiktok: `Please Find me the Right TikTok account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.OriginalBrand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at tiktok.com/@powerade. From there a general search, for example do a search for 'powerade beverage tiktok'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.tiktok.com/@cocacola, https://tiktok.com/@pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`
+  youtube: `Please Find me the Right Youtube account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} and {{original_brand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at youtube.com/powerade. From there a general search, for example do a search for 'powerade beverage youtube'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.youtube.com/@joerogan, https://www.youtube.com/channel/UCRHa2-Ajldj8yVUBcwtn_VQ). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
+  twitter: `Please Find me the Right Twitter account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} and {{original_brand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at twitter.com/powerade. From there a general search, for example do a search for 'powerade beverage twitter'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://twitter.com/cocacola, https://x.com/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
+  linkedin: `Please Find me the Right LinkedIn account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} and {{original_brand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at linkedin.com/company/powerade. From there a general search, for example do a search for 'powerade beverage linkedin'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.linkedin.com/company/coca-cola/, https://linkedin.com/company/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
+  instagram: `Please Find me the Right Instagram account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} and {{original_brand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at instagram.com/powerade. From there a general search, for example do a search for 'powerade beverage instagram'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.instagram.com/cocacola/, https://instagram.com/pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`,
+  tiktok: `Please Find me the Right TikTok account for the following brand: {{1.Competitor}} in the region: {{region}}. {{1.Competitor}} and {{original_brand}} are active in this region. Make sure the social media account you find is the right one, it should be an established account with a large following. A good place to start is looking at the obvious URLs, for example for the brand Powerade, first look at tiktok.com/@powerade. From there a general search, for example do a search for 'powerade beverage tiktok'. DO NOT MAKE UP SOCIAL MEDIA ACCOUNTS. Make sure the URL is a full URL and not a truncated link. Make sure the URL is in the proper format (examples: https://www.tiktok.com/@cocacola, https://tiktok.com/@pepsi). Lastly MAKE SURE TO VERIFY that the URL you output corresponds to the URL where you found the information. ONLY OUTPUT THE SINGLE MOST RELEVANT URL WITH NO OTHER TEXT OR EXPLANATION.`
 }
 
 export const EMAIL_TEMPLATES = {
@@ -95,3 +95,80 @@ Provide a thorough, yet succinct, breakdown of the target brand's performance ve
 
 • Areas of opportunity and suggested next steps based on data-driven insights.`
 }
+
+export type Platform = 'youtube' | 'instagram' | 'linkedin' | 'tiktok' | 'twitter';
+
+export const google_gpt_URL_prompts = {
+  instagram: (query: string, context: string) => `
+    I searched for: "${query}". Below are the search results. 
+    Find the official Instagram account for this brand. Look for:
+    - Verified accounts (blue check)
+    - URLs matching pattern instagram.com/brandname
+    - High follower counts
+    - Official branding and content
+    Return ONLY the most relevant full URL. If unsure, return empty string.
+    
+    Search Results:
+    ${context}
+  `,
+  linkedin: (query: string, context: string) => `
+    I searched for: "${query}". Below are the search results. 
+    Find the official LinkedIn company page. Look for:
+    - URLs matching pattern linkedin.com/company/brandname
+    - Company pages (not personal profiles)
+    - Official company information and branding
+    Return ONLY the most relevant full URL. If unsure, return empty string.
+    
+    Search Results:
+    ${context}
+  `,
+  tiktok: (query: string, context: string) => `
+    I searched for: "${query}". Below are the search results. 
+    Find the official TikTok account. Look for:
+    - Verified accounts
+    - URLs matching pattern tiktok.com/@brandname
+    - High follower counts
+    - Official branding and content
+    Return ONLY the most relevant full URL. If unsure, return empty string.
+    
+    Search Results:
+    ${context}
+  `,
+  twitter: (query: string, context: string) => `
+    I searched for: "${query}". Below are the search results. 
+    Find the official Twitter account. Look for:
+    - Verified accounts
+    - URLs matching pattern twitter.com/brandname
+    - High follower counts
+    - Official branding and content
+    Return ONLY the most relevant full URL. If unsure, return empty string.
+    
+    Search Results:
+    ${context}
+  `,
+  youtube: (query: string, context: string) => `
+  I searched for: "${query}". Below are the search results. 
+  Your task is to find and return ONLY the official YouTube channel URL for this brand.
+
+  Requirements:
+  1. MUST return a URL in one of these formats:
+     - https://www.youtube.com/@brandname
+     - https://youtube.com/@brandname
+     - https://www.youtube.com/c/brandname
+     - https://youtube.com/c/brandname
+     - https://www.youtube.com/channel/[ID]
+  2. DO NOT return any explanatory text
+  3. If multiple URLs found, return the most relevant one
+  4. If no valid URL found, return the most likely official channel URL from the search results
+  5. NEVER return an empty string or explanatory text
+
+  Look for:
+  - Verified channels
+  - High subscriber counts
+  - Official branding and content
+  - Matching brand name
+  
+  Search Results:
+  ${context}
+  `
+} as const;
