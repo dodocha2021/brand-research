@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { FiSearch, FiClock } from 'react-icons/fi'
 import { toast } from 'react-hot-toast'
 import { useRouter } from 'next/navigation'
@@ -13,6 +13,13 @@ export default function Home() {
   const router = useRouter()
   const [region, setRegion] = useState('Global')
   const [competitors, setCompetitors] = useState<string[]>([])
+  const [githubVersion, setGithubVersion] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('https://raw.githubusercontent.com/dodocha2021/brand-research/main/package.json')
+      .then(res => res.json())
+      .then(data => setGithubVersion(data.version || null))
+      .catch(() => setGithubVersion(null))
+  }, [])
   const regions = [
     { value: '', label: 'Select Region' },
     { value: 'North America', label: 'North America' },
@@ -145,7 +152,11 @@ export default function Home() {
   }
 
   return (
-    <div className="container">
+    <>
+      <div style={{ position: 'fixed', top: 8, left: 12, fontSize: 12, color: '#555' }}>
+        {githubVersion ? `Version: ${githubVersion}` : 'Version: loading...'}
+      </div>
+      <div className="container">
       <h1>Brand Competitor Analysis</h1>
       {/* 搜索行：输入框和下拉菜单同一行 */}
       <div className="search-row">
@@ -241,6 +252,7 @@ export default function Home() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </>
   )
 }
