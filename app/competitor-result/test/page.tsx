@@ -13,18 +13,23 @@ const REGIONS = [
   { value: 'Middle East & Africa', label: 'Middle East & Africa' },
   { value: 'Global', label: 'Global' }
 ]
+const AI_MODELS = [
+  { value: 'gpt', label: 'GPT' },
+  { value: 'claude', label: 'Claude' }
+]
 
 export default function TestPage() {
   const [brand, setBrand] = useState('')
   const [platform, setPlatform] = useState('')
   const [region, setRegion] = useState('')
+  const [aiModel, setAiModel] = useState('gpt')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState('')
   const [step, setStep] = useState<'idle' | 'google' | 'gpt'>('idle')
 
   const handleSearch = async () => {
-    if (!brand || !platform || !region) {
-      toast.error('Please enter brand name, select platform and region')
+    if (!brand || !platform || !region || !aiModel) {
+      toast.error('Please enter brand name, select platform, region, and AI model')
       return
     }
 
@@ -38,7 +43,8 @@ export default function TestPage() {
         body: JSON.stringify({
           brand,
           platform,
-          region
+          region,
+          aiModel
         })
       })
       
@@ -55,7 +61,7 @@ export default function TestPage() {
       const data = await res.json()
       console.log('API Response Data:', data)
 
-      if (data.url) {
+      if (data.url && data.url.trim() !== '') {
         setResult(data.url)
         toast.success('URL Found!')
       } else {
@@ -133,6 +139,25 @@ export default function TestPage() {
             </select>
           </div>
 
+          {/* AI模型选择 */}
+          <div>
+            <label style={{ display: 'block', marginBottom: 8 }}>AI Model:</label>
+            <select
+              value={aiModel}
+              onChange={e => setAiModel(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: 8,
+                border: '1px solid #ddd'
+              }}
+            >
+              {AI_MODELS.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
           {/* 搜索按钮 */}
           <button
             onClick={handleSearch}
@@ -150,12 +175,12 @@ export default function TestPage() {
             }}
           >
             {loading ? (
-              step === 'google' ? 'Google Searching...' : 'GPT Analyzing...'
+              step === 'google' ? 'Google Searching...' : 'AI Analyzing...'
             ) : 'Search'}
           </button>
 
           {/* 结果显示 */}
-          {result && (
+          {result && result.trim() !== '' && (
             <div style={{ marginTop: 24 }}>
               <h3>Search Result:</h3>
               <a

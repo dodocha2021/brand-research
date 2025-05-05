@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY!
 const SEARCH_ENGINE_ID = process.env.SEARCH_ENGINE_ID!
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY!
+const CLAUDE_API_KEY = process.env.ANTHROPIC_API_KEY!
 
 // === Region Mapping ===
 const REGION_CODES: { [key: string]: string[] } = {
@@ -70,100 +71,106 @@ async function googleSearch(query: string, region: string): Promise<any[]> {
   }
 }
 
-// === Step 2 - GPT Analysis Function ===
-async function extractBestLink(results: any[], query: string, platform: string, region: string): Promise<string> {
+// === Step 2 - AI Analysis Function ===
+async function extractBestLink(results: any[], query: string, platform: string, region: string, aiModel: string): Promise<string> {
   console.log(`Analyzing ${results.length} search results for region: ${region}...`)
 
   const context = results.map((item, index) => 
     `Result ${index + 1}:\nTitle: ${item.title}\nLink: ${item.link}\nSnippet: ${item.snippet}`
   ).join('\n\n')
 
-  const systemPrompt = region === 'Global' 
-    ? `You are a precise and cautious expert at identifying official brand social media accounts.
-Your task is to analyze search results and find the main official account with the highest follower count and engagement.
-Rules:
-1. ONLY return a URL if you are highly confident it is the official account
-2. Return an empty string if you have any doubts
-3. Do not explain or add any other text
-4. Verify the URL matches the platform's official domain pattern
-5. Look for:
-   - Verification badges
-   - High follower counts
-   - High engagement rates
-   - Official branding and content
-   - Global/international content focus`
-    : `You are a precise and cautious expert at identifying official brand social media accounts.
-Your task is to analyze search results and find the official account that serves the specified region.
-Rules:
-1. ONLY return a URL if you are highly confident it is the official account
-2. Return an empty string if you have any doubts
-3. Do not explain or add any other text
-4. Verify the URL matches the platform's official domain pattern
-5. Look for regional relevance through:
-   - Content language matching the region (e.g., Japanese/Korean/Chinese for Asia-Pacific, German/French/Italian for Europe)
-   - Content focus on regional events, products, or news
-   - Regional audience engagement
-   - Regional marketing campaigns
-   - Local partnerships and collaborations
-6. The account doesn't necessarily need region indicators in its name/URL
-7. Prioritize accounts that consistently post content relevant to the target region`
+  const systemPrompt = `You are a URL extractor specialized in identifying brand social media accounts.
+Rules for identifying OFFICIAL accounts (must meet at least 2 of these criteria):
+1. Has verification badge or indicators of being official
+2. Username/handle matches or relates to the brand name
+3. Profile description or content suggests it's an official channel
+4. Has significant follower count or engagement
+5. Content appears professional and brand-related
 
-  const userPrompt = region === 'Global'
-    ? `Search query: ${query}
+Response Rules:
+1. If you find an account matching multiple criteria above, return its URL
+2. If completely uncertain about authenticity, return empty string
+3. If multiple accounts found, prefer the one with more verification signals
+4. Return ONLY the URL or empty string, no other text`
 
-Analyze these ${results.length} search results and return ONLY the main official account URL with the highest following and engagement.
-If you cannot find a definitive official account, return an empty string.
-Do not add any explanations or additional text.
-
-Search Results:
-${context}`
-    : `Search query: ${query}
-Target region: ${region}
+  const userPrompt = `Brand: ${query.split(' ')[0]}
 Platform: ${platform}
+Region: ${region}
 
-Analyze these ${results.length} search results and find the official account URL that best serves the ${region} region.
-Look for accounts with content and language matching the region's audience.
-If you cannot find a definitive official account for this region, return an empty string.
-Do not add any explanations or additional text.
+Analyze these search results and return the most likely official account URL.
+If you cannot determine authenticity with reasonable confidence, return an empty string.
+ONLY return the URL or empty string, nothing else.
 
 Search Results:
 ${context}`
 
   try {
-    console.log('Calling GPT API...')
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt
-          },
-          {
-            role: 'user',
-            content: userPrompt
-          }
-        ],
-        temperature: 0.1
+    console.log(`Calling ${aiModel} API...`)
+    let res;
+    let data;
+
+    if (aiModel === 'claude') {
+      // Claude API调用
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': CLAUDE_API_KEY,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'claude-3-7-sonnet-20250219',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: systemPrompt + '\n\n' + userPrompt
+            }
+          ]
+        })
       })
-    })
+    } else {
+      // GPT API调用
+      res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o',
+          messages: [
+            {
+              role: 'system',
+              content: systemPrompt
+            },
+            {
+              role: 'user',
+              content: userPrompt
+            }
+          ],
+          temperature: 0.1
+        })
+      })
+    }
 
     if (!res.ok) {
-      console.error('OpenAI API error:', res.status)
+      console.error(`${aiModel} API error:`, res.status)
       return ''
     }
 
-    const data = await res.json()
-    const result = data?.choices?.[0]?.message?.content?.trim() || ''
-    console.log('GPT result:', result)
+    data = await res.json()
+    let result = aiModel === 'claude' ? data.content[0].text.trim() : data?.choices?.[0]?.message?.content?.trim() || ''
+    
+    // 确保结果只包含URL或空字符串
+    if (result && !result.startsWith('http')) {
+      result = ''
+    }
+    
+    console.log(`${aiModel} result:`, result)
     return result
   } catch (e) {
-    console.error('GPT API error:', e)
+    console.error(`${aiModel} API error:`, e)
     return ''
   }
 }
@@ -171,15 +178,15 @@ ${context}`
 // === API Route Handler ===
 export async function POST(req: NextRequest) {
   try {
-    const { brand, platform, region } = await req.json()
+    const { brand, platform, region, aiModel } = await req.json()
 
     // Check required parameters
-    if (!brand || !platform || !region) {
+    if (!brand || !platform || !region || !aiModel) {
       throw new Error('Missing required parameters')
     }
 
     // Check environment variables
-    if (!GOOGLE_API_KEY || !SEARCH_ENGINE_ID || !OPENAI_API_KEY) {
+    if (!GOOGLE_API_KEY || !SEARCH_ENGINE_ID || !OPENAI_API_KEY || !CLAUDE_API_KEY) {
       throw new Error('Missing required environment variables')
     }
 
@@ -195,9 +202,9 @@ export async function POST(req: NextRequest) {
     const searchResults = await googleSearch(query, region)
     console.log('Search results count:', searchResults.length)
 
-    // Step 2: GPT Analysis
-    console.log('Starting GPT Analysis...')
-    const url = await extractBestLink(searchResults, query, platform, region)
+    // Step 2: AI Analysis
+    console.log('Starting AI Analysis...')
+    const url = await extractBestLink(searchResults, query, platform, region, aiModel)
 
     console.log('✅ Process completed. URL:', url)
     return NextResponse.json({ 
