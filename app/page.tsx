@@ -14,12 +14,14 @@ export default function Home() {
   const [region, setRegion] = useState('Global')
   const [competitors, setCompetitors] = useState<string[]>([])
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
+
   useEffect(() => {
     fetch('https://raw.githubusercontent.com/dodocha2021/brand-research/main/package.json')
       .then(res => res.json())
       .then(data => setGithubVersion(data.version || null))
       .catch(() => setGithubVersion(null))
   }, [])
+
   const regions = [
     { value: '', label: 'Select Region' },
     { value: 'North America', label: 'North America' },
@@ -120,8 +122,8 @@ export default function Home() {
 
   // 点击 Next，写入数据库
   const handleNext = async () => {
-    const filtered = competitors.map(c => c.trim()).filter(Boolean) // Do not exclude the first element
-    if (filtered.length <= 1) { // At least keyword and one competitor
+    const filtered = competitors.map(c => c.trim()).filter(Boolean)
+    if (filtered.length <= 1) {
       toast.error('Please enter at least one competitor')
       return
     }
@@ -133,7 +135,7 @@ export default function Home() {
         body: JSON.stringify({
           originalBrand: searchTerm,
           region,
-          competitors: filtered // Send all data, including the first element
+          competitors: filtered
         })
       })
       const json = await res.json()
@@ -153,105 +155,182 @@ export default function Home() {
 
   return (
     <>
+      {/* 版本号 */}
       <div style={{ position: 'fixed', top: 8, left: 12, fontSize: 12, color: '#555' }}>
         {githubVersion ? `Version: ${githubVersion}` : 'Version: loading...'}
       </div>
+
       <div className="container">
-      <h1>Brand Competitor Analysis</h1>
-      {/* 搜索行：输入框和下拉菜单同一行 */}
-      <div className="search-row">
-        <input
-          type="text"
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          placeholder="Enter brand name..."
-          disabled={loading || step !== 'idle'}
-        />
-        <select
-          value={region}
-          onChange={e => setRegion(e.target.value)}
-          disabled={loading}
-        >
-          {regions.map(r => (
-            <option key={r.value} value={r.value}>{r.label}</option>
-          ))}
-        </select>
-      </div>
-      {/* Search按钮单独一行 */}
-      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
-        <button
-          className="search-btn"
-          onClick={handleSearch}
-          disabled={loading || !searchTerm.trim() || !region}
-          style={{ maxWidth: 300 }}
-        >
-          {loading && step !== 'edit' ? '⏳' : 'Search'}
-        </button>
-        <button
-          className="search-btn"
-          style={{ width: 120, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
-          onClick={() => window.location.href = '/history'}
-        >
-          Search History
-        </button>
-      </div>
-      {/* 结果区域 */}
-      <div style={{ marginTop: 32 }}>
-        {loading && step !== 'edit' && (
-          <div style={{ textAlign: 'center', color: '#2563eb', fontWeight: 600, fontSize: 20, padding: 24 }}>
-            {step === 'gpt4o-mini' && 'Analyzing ...'}
-            {step === 'gpt4o' && 'Summarizing ...'}
-          </div>
-        )}
-        {/* 可编辑竞争对手列表 */}
-        {step === 'edit' && (
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 24 }}>
-            {competitors.map((c, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-                <input
-                  type="text"
-                  value={c}
-                  onChange={e => handleCompetitorChange(idx, e.target.value)}
-                  style={{ flex: 1, padding: '8px 12px', borderRadius: 8, border: '1px solid #ccc', fontSize: 16 }}
-                  placeholder={`Competitor ${idx + 1}`}
-                />
-                {idx > 0 && (
-                  <button
-                    onClick={() => handleRemoveCompetitor(idx)}
-                    style={{ color: '#f87171', fontSize: 20, border: 'none', background: 'none', cursor: 'pointer' }}
-                  >×</button>
-                )}
-              </div>
+        <h1>Brand Competitor Analysis</h1>
+
+        {/* 搜索行：输入框和下拉菜单同一行 */}
+        <div className="search-row">
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Enter brand name..."
+            disabled={loading || step !== 'idle'}
+          />
+          <select value={region} onChange={e => setRegion(e.target.value)} disabled={loading}>
+            {regions.map(r => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
             ))}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
-              <button
-                onClick={handleAddCompetitor}
-                style={{ color: '#2563eb', fontSize: 22, border: 'none', background: 'none', cursor: 'pointer' }}
-              >＋</button>
-              <span style={{ color: '#666', fontSize: 15 }}>
-                AI can make mistakes. Please double-check, add, delete, or edit competitors above before pressing Next.
-              </span>
+          </select>
+        </div>
+
+        {/* Search 和历史 & Simple Mode 按钮 */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 32 }}>
+          <button
+            className="search-btn"
+            onClick={handleSearch}
+            disabled={loading || !searchTerm.trim() || !region}
+            style={{ maxWidth: 300 }}
+          >
+            {loading && step !== 'edit' ? '⏳' : 'Search'}
+          </button>
+          <button
+            className="search-btn"
+            style={{ width: 120, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
+            disabled
+          >
+            Search History
+          </button>
+          <button
+            className="search-btn"
+            style={{ width: 80, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
+            onClick={() => window.location.href = '/simple-mode'}
+          >
+            Simple Mode
+          </button>
+        </div>
+
+        {/* 结果区域 */}
+        <div style={{ marginTop: 32 }}>
+          {loading && step !== 'edit' && (
+            <div
+              style={{
+                textAlign: 'center',
+                color: '#2563eb',
+                fontWeight: 600,
+                fontSize: 20,
+                padding: 24
+              }}
+            >
+              {step === 'gpt4o-mini' && 'Analyzing ...'}
+              {step === 'gpt4o' && 'Summarizing ...'}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button
-                onClick={handleNext}
-                style={{ background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, padding: '8px 24px', fontWeight: 600, fontSize: 16, cursor: 'pointer' }}
-                disabled={loading}
-              >Next</button>
-            </div>
-          </div>
-        )}
-        {/* 只读结果 */}
-        {result && step !== 'edit' && (
-          <div style={{ background: '#fff', borderRadius: 16, padding: 24, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-            <ol style={{ paddingLeft: 24 }}>
-              {result.split(',').map((item, idx) => (
-                <li key={idx} style={{ fontSize: 18, color: '#222', marginBottom: 8 }}>{item.trim()}</li>
+          )}
+
+          {/* 可编辑竞争对手列表 */}
+          {step === 'edit' && (
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: 16,
+                padding: 24,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                marginBottom: 24
+              }}
+            >
+              {competitors.map((c, idx) => (
+                <div
+                  key={idx}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}
+                >
+                  <input
+                    type="text"
+                    value={c}
+                    onChange={e => handleCompetitorChange(idx, e.target.value)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: 8,
+                      border: '1px solid #ccc',
+                      fontSize: 16
+                    }}
+                    placeholder={`Competitor ${idx + 1}`}
+                  />
+                  {idx > 0 && (
+                    <button
+                      onClick={() => handleRemoveCompetitor(idx)}
+                      style={{
+                        color: '#f87171',
+                        fontSize: 20,
+                        border: 'none',
+                        background: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
               ))}
-            </ol>
-          </div>
-        )}
-      </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 8 }}>
+                <button
+                  onClick={handleAddCompetitor}
+                  style={{
+                    color: '#2563eb',
+                    fontSize: 22,
+                    border: 'none',
+                    background: 'none',
+                    cursor: 'pointer'
+                  }}
+                >
+                  ＋
+                </button>
+                <span style={{ color: '#666', fontSize: 15 }}>
+                  AI can make mistakes. Please double-check, add, delete, or edit competitors above
+                  before pressing Next.
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                <button
+                  onClick={handleNext}
+                  style={{
+                    background: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '8px 24px',
+                    fontWeight: 600,
+                    fontSize: 16,
+                    cursor: 'pointer'
+                  }}
+                  disabled={loading}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 只读结果 */}
+          {result && step !== 'edit' && (
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: 16,
+                padding: 24,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+              }}
+            >
+              <ol style={{ paddingLeft: 24 }}>
+                {result.split(',').map((item, idx) => (
+                  <li
+                    key={idx}
+                    style={{ fontSize: 18, color: '#222', marginBottom: 8 }}
+                  >
+                    {item.trim()}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
       </div>
     </>
   )

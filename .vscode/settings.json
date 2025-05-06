@@ -1,0 +1,8 @@
+{
+    // 关闭 VSCode 内置 CSS/SCSS/LESS 校验
+    "css.validate": false,
+    "scss.validate": false,
+    "less.validate": false,
+    // 启用 PostCSS 校验，以识别 @tailwind、@apply 等指令
+    "postcss.validate": true
+  }

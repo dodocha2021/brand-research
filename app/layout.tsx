@@ -1,15 +1,14 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import "./globals.css";
-import { Toaster } from "react-hot-toast";
-import ThemeToggle from "./ThemeToggle";
+import type { Metadata } from 'next'
+import { Inter } from 'next/font/google'
+import './globals.css'
+import { Toaster } from 'react-hot-toast'
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "Brand Competitor Analysis",
+  title: 'Brand Competitor Analysis',
   description: "Analyze your brand's competitors across different platforms and regions",
-};
+}
 
 export default function RootLayout({
   children,
@@ -19,10 +18,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <ThemeToggle />
         {children}
         <Toaster position="top-right" />
       </body>
     </html>
-  );
+  )
 }

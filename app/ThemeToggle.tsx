@@ -1,36 +1,35 @@
-"use client";
-import { useEffect, useState } from "react";
+"use client"
+import { useEffect, useState } from "react"
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    const saved = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('theme') : null
     if (saved === 'dark') {
-      document.body.classList.add('dark');
-      setTheme('dark');
+      document.body.classList.add('dark')
+      setTheme('dark')
     } else {
-      document.body.classList.remove('dark');
-      setTheme('light');
+      document.body.classList.remove('dark')
+      setTheme('light')
     }
-  }, []);
+  }, [])
 
   const toggleTheme = () => {
     if (theme === 'dark') {
-      document.body.classList.remove('dark');
-      setTheme('light');
-      localStorage.setItem('theme', 'light');
+      document.body.classList.remove('dark')
+      setTheme('light')
+      localStorage.setItem('theme', 'light')
     } else {
-      document.body.classList.add('dark');
-      setTheme('dark');
-      localStorage.setItem('theme', 'dark');
+      document.body.classList.add('dark')
+      setTheme('dark')
+      localStorage.setItem('theme', 'dark')
     }
-  };
+  }
 
   return (
     <button
       onClick={toggleTheme}
-      disabled
       style={{
         position: 'fixed',
         top: 24,
@@ -44,8 +43,8 @@ export default function ThemeToggle() {
         fontWeight: 600,
         padding: '8px 20px 8px 16px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-        cursor: 'not-allowed',
-        opacity: 0.5,
+        cursor: 'pointer',     // enable pointer
+        opacity: 1,            // full opacity
         display: 'flex',
         alignItems: 'center',
         gap: 8,
@@ -53,10 +52,8 @@ export default function ThemeToggle() {
       }}
       aria-label="Toggle theme"
     >
-      <span style={{ fontSize: 22 }}>
-        {theme === 'dark' ? '🌞' : '🌙'}
-      </span>
+      <span style={{ fontSize: 22 }}>{theme === 'dark' ? '🌞' : '🌙'}</span>
       {theme === 'dark' ? 'Light' : 'Dark'}
     </button>
-  );
+  )
 }
