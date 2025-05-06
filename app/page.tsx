@@ -194,7 +194,7 @@ export default function Home() {
           <button
             className="search-btn"
             style={{ width: 120, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
-            disabled
+            onClick={() => window.location.href = '/history'}
           >
             Search History
           </button>

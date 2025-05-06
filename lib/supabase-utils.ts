@@ -104,14 +104,14 @@ export async function addSimpleSearchEntry(
   return data
 }
 
-// 7. 获取所有搜索会话（按时间倒序）
-export async function getAllSearches(): Promise<
-  Database['public']['Tables']['searches']['Row'][]
-> {
+
+
+// 8. 获取竞争对手搜索历史记录（按时间倒序）
+export async function getCompetitors(): Promise<any[]> {
   const { data, error } = await supabase
-    .from('searches')
+    .from('competitor_search_history')
     .select('*')
     .order('created_at', { ascending: false })
   if (error) throw error
-  return data
+  return data || []
 }
