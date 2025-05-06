@@ -178,10 +178,11 @@ ${context}`
 // === API Route Handler ===
 export async function POST(req: NextRequest) {
   try {
-    const { brand, platform, region, aiModel } = await req.json()
+    // aiModel 默认值为 'gpt'
+    const { brand, platform, region, aiModel = 'gpt' } = await req.json()
 
     // Check required parameters
-    if (!brand || !platform || !region || !aiModel) {
+    if (!brand || !platform || !region) {
       throw new Error('Missing required parameters')
     }
 
