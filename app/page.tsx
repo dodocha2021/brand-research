@@ -193,7 +193,7 @@ export default function Home() {
           </button>
           <button
             className="search-btn"
-            style={{ width: 120, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
+            style={{ width: 80, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
             onClick={() => window.location.href = '/history'}
           >
             Search History
@@ -204,6 +204,13 @@ export default function Home() {
             onClick={() => window.location.href = '/simple-mode'}
           >
             Simple Mode
+          </button>
+          <button
+            className="search-btn"
+            style={{ width: 80, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
+            onClick={() => window.location.href = '/competitor-result/test'}
+          >
+            Brand Search
           </button>
         </div>
 
