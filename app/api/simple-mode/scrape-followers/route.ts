@@ -28,7 +28,7 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   initialDelay: 2000,     // 初始延迟时间（毫秒）
   maxDelay: 20000,        // 最大延迟时间（毫秒）
   backoff: 2,             // 指数退避因子
-  timeout: 180000         // 设置超时时间为 3 分钟（180000 毫秒）
+  timeout: 60000          // 设置超时时间为 1 分钟（60000 毫秒）
 }
 
 // 重试函数
@@ -58,7 +58,7 @@ async function retryWithTimeout<T>(
       }
     } catch (error) {
       console.error(`Attempt ${attempts} failed:`, error)
-      
+
       // 指数退避策略
       delay = Math.min(delay * options.backoff, options.maxDelay)
       console.log(`Retrying in ${delay}ms... (Attempt ${attempts + 1} of ${options.maxRetries})`)
@@ -222,7 +222,7 @@ export async function POST(req: NextRequest) {
     const results = []
     
     for (let i = 0; i < items.length; i += batchSize) {
-      const batch = items.slice(i, i + batchSize)
+      const batch = items.slice(i, i + batchSize) // 获取当前批次
       const batchResults = await Promise.all(
         batch.map(async item => {
           try {
@@ -235,7 +235,7 @@ export async function POST(req: NextRequest) {
                 initialDelay: 2000,
                 maxDelay: 20000,
                 backoff: 2,
-                timeout: 180000 // 设置超时时间为 3 分钟
+                timeout: 60000 // 每个请求的超时时间
               }
             )
             const followers = extractFollowersCount(item.platform, data)
@@ -255,7 +255,7 @@ export async function POST(req: NextRequest) {
           }
         })
       )
-      results.push(...batchResults)
+      results.push(...batchResults) // 将当前批次的结果添加到总结果中
     }
 
     // 统计成功和失败的请求
