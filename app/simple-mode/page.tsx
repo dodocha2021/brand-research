@@ -55,6 +55,9 @@ const statusPercent: Record<Step, number> = {
 export default function SimpleModePage() {
   // 版本号
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
+  const [terminalLogs, setTerminalLogs] = useState<string[]>([])
+  const logWindowRef = useRef<HTMLDivElement>(null)
+
   useEffect(() => {
     fetch(
       'https://raw.githubusercontent.com/dodocha2021/brand-research/main/package.json'
@@ -63,6 +66,13 @@ export default function SimpleModePage() {
       .then(data => setGithubVersion(data.version || null))
       .catch(() => setGithubVersion(null))
   }, [])
+
+  // 自动滚动日志窗口到底部
+  useEffect(() => {
+    if (logWindowRef.current) {
+      logWindowRef.current.scrollTop = logWindowRef.current.scrollHeight
+    }
+  }, [terminalLogs])
 
   const [step, setStep] = useState<Step>('idle')
   const [progress, setProgress] = useState<number>(0)
@@ -103,11 +113,13 @@ export default function SimpleModePage() {
       if (timerRef.current !== null) clearInterval(timerRef.current)
     }
   }, [step])
-
   const handleGenerateEmail = async () => {
     try {
+      setTerminalLogs([]) // 清空之前的日志
+
       // 1. Create search session
       setStep('creating')
+      setTerminalLogs(prev => [...prev, `Creating search session for brand: ${brandName}`])
       const createRes = await fetch('/api/simple-mode/create-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -124,9 +136,11 @@ export default function SimpleModePage() {
       const id = createJson.searchId
       if (!id) throw new Error('No search ID returned')
       setSearchId(id)
+      setTerminalLogs(prev => [...prev, `Search session created with ID: ${id}`])
 
       // 2. Analyse competitors
       setStep('analysing')
+      setTerminalLogs(prev => [...prev, `Analyzing competitors for ${brandName}`])
       const compRes = await fetch('/api/simple-mode/analyse-competitors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,6 +158,7 @@ export default function SimpleModePage() {
         throw new Error('Invalid competitors data received')
       }
       setCompetitors(compJson.competitors)
+      setTerminalLogs(prev => [...prev, `Found ${compJson.competitors.length - 1} competitors`])
 
       // 3. Build items list
       setStep('extracting')
@@ -155,10 +170,12 @@ export default function SimpleModePage() {
         .flatMap((name: string) => usePlatforms.map(p => ({ name, platform: p })))
       const allItems: Item[] = [...brandPlatforms, ...compItems]
       setItems(allItems)
+      setTerminalLogs(prev => [...prev, `Building items list for ${usePlatforms.join(', ')}`])
 
       // 4. Extract URLs
       const itemsWithUrl: Item[] = []
       for (const it of allItems) {
+        setTerminalLogs(prev => [...prev, `Extracting URL for ${it.name} on ${it.platform}`])
         const urlRes = await fetch('/api/simple-mode/extract-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -176,11 +193,19 @@ export default function SimpleModePage() {
           { step: `extract-url:${it.platform}`, data: urlJson },
         ])
         itemsWithUrl.push({ ...it, url: urlJson.url })
+        setTerminalLogs(prev => [...prev, `Found URL: ${urlJson.url}`])
       }
       setItems(itemsWithUrl)
 
       // 5. Scrape followers
       setStep('scraping')
+      setTerminalLogs(prev => [...prev, 'Starting to scrape followers data...'])
+
+      // 添加所有要抓取的 URL 信息
+      itemsWithUrl.forEach(item => {
+        setTerminalLogs(prev => [...prev, `Fetching ${item.platform} data for URL: ${item.url}`])
+      })
+
       const scrapeRes = await fetch('/api/simple-mode/scrape-followers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,15 +219,30 @@ export default function SimpleModePage() {
 
       const scrapeJson = await scrapeRes.json() as ScrapeFollowersResponse
       setDebugResponses(prev => [...prev, { step: 'scrape-followers', data: scrapeJson }])
-      
+
+      // 添加每个平台的抓取结果
+      scrapeJson.results.forEach(result => {
+        const statusMessage = result.success 
+          ? `Successfully scraped ${result.platform} for ${result.name}: ${result.followers} followers`
+          : `Failed to scrape ${result.platform} for ${result.name}${result.error ? `: ${result.error}` : ''}`
+        setTerminalLogs(prev => [...prev, statusMessage])
+      })
+
       if (scrapeJson.summary.failed > 0) {
-        console.warn(`${scrapeJson.summary.failed} items failed to scrape`)
+        const message = `${scrapeJson.summary.failed} items failed to scrape`
+        console.warn(message)
+        setTerminalLogs(prev => [...prev, `Warning: ${message}`])
       }
 
       setItems(scrapeJson.results)
+      setTerminalLogs(prev => [
+        ...prev, 
+        `Scraping completed: ${scrapeJson.summary.successful} successful, ${scrapeJson.summary.failed} failed`
+      ])
 
       // 6. Generate email
       setStep('generating')
+      setTerminalLogs(prev => [...prev, 'Generating email content...'])
       const emailRes = await fetch('/api/simple-mode/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -222,6 +262,7 @@ export default function SimpleModePage() {
       const emailJson = await emailRes.json()
       setDebugResponses(prev => [...prev, { step: 'generate-email', data: emailJson }])
       setEmailContent(emailJson.content)
+      setTerminalLogs(prev => [...prev, 'Email content generated successfully'])
 
       setStep('done')
       toast.success('Email generated!')
@@ -229,10 +270,10 @@ export default function SimpleModePage() {
       console.error('Error in handleGenerateEmail:', err)
       setErrorInfo(err.message)
       setStep('error')
+      setTerminalLogs(prev => [...prev, `Error: ${err.message}`])
       toast.error('Error: ' + err.message)
     }
   }
-
   return (
     <div className="container" style={{ position: 'relative' }}>
       {/* 版本号 */}
@@ -346,6 +387,30 @@ export default function SimpleModePage() {
             <p style={{ marginTop: 8, fontWeight: 600 }}>
               {progress}% – {step.charAt(0).toUpperCase() + step.slice(1)}
             </p>
+          </div>
+
+          {/* 终端日志窗口 */}
+          <div
+            ref={logWindowRef}
+            style={{
+              background: '#1e1e1e',
+              color: '#fff',
+              fontFamily: 'monospace',
+              padding: '12px',
+              borderRadius: '4px',
+              height: '200px',
+              overflowY: 'auto',
+              marginBottom: '16px',
+              fontSize: '12px',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all'
+            }}
+          >
+            {terminalLogs.map((log, index) => (
+              <div key={index} style={{ marginBottom: '4px', color: log.includes('Error:') ? '#ff6b6b' : log.includes('Warning:') ? '#ffd93d' : '#fff' }}>
+                {log}
+              </div>
+            ))}
           </div>
 
           {/* 分析结果 */}
