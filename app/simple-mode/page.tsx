@@ -138,22 +138,18 @@ export default function SimpleModePage() {
     }
   }
 
-  // Handle ignoring all invalid data
+  // 修改 handleIgnoreAll: 当点击 ignore 时，只保留已经更新为有效的数据，而不删除 retry 后更新的数据
   const handleIgnoreAll = async () => {
     try {
-      const ignoreRes = await fetch('/api/simple-mode/scrape-followers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items, searchId, ignoreIncomplete: true }),
-      })
-      const ignoreJson = await ignoreRes.json()
-      setDebugResponses((prev) => [
-        ...prev,
-        { step: 'scrape-followers-ignoreAll', data: ignoreJson },
-      ])
+      // 保留那些已经有效（followers 非空且大于等于200）的记录
+      const validItems = items.filter(
+        (item: Item) =>
+          item.followers !== undefined &&
+          item.followers !== null &&
+          item.followers >= 200
+      )
+      setItems(validItems)
       setNeedUserAction(false)
-      setItems(ignoreJson.results)
-      // Continue to generate email
       handleGenerateEmailAfterScraping()
     } catch (e: any) {
       toast.error('Ignore failed: ' + e.message)
