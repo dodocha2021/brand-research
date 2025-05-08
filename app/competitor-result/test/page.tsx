@@ -25,7 +25,71 @@ export default function TestPage() {
   const [aiModel, setAiModel] = useState('gpt')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState('')
+  const [followers, setFollowers] = useState<number | null>(null)
   const [step, setStep] = useState<'idle' | 'google' | 'gpt'>('idle')
+
+  // 根据平台构造请求体
+  const getRequestBody = (url: string, platform: string) => {
+    switch (platform) {
+      case 'instagram':
+        return { usernames: [url] }
+      case 'linkedin':
+        return { identifier: url }
+      case 'tiktok':
+        return {
+          excludePinnedPosts: false,
+          profiles: [url],
+          resultsPerPage: 1,
+          shouldDownloadAvatars: false,
+          shouldDownloadCovers: false,
+          shouldDownloadSlideshowImages: false,
+          shouldDownloadSubtitles: false,
+          shouldDownloadVideos: false,
+          profileScrapeSections: ["videos"],
+          profileSorting: "latest"
+        }
+      case 'twitter':
+        return {
+          maxItems: 1,
+          sort: 'Latest',
+          startUrls: [url]
+        }
+      case 'youtube':
+        return {
+          maxResultStreams: 0,
+          maxResults: 1,
+          maxResultsShorts: 0,
+          sortVideosBy: 'POPULAR',
+          startUrls: [{ url, method: 'GET' }]
+        }
+      default:
+        throw new Error(`Unsupported platform: ${platform}`)
+    }
+  }
+
+  // 从返回数据中提取关注者数量
+  const extractFollowersCount = (data: any, platform: string): number | null => {
+    try {
+      const info = Array.isArray(data) ? data[0] : data
+      switch (platform) {
+        case 'instagram':
+          return info?.followersCount ?? null
+        case 'linkedin':
+          return info?.stats?.follower_count ?? null
+        case 'tiktok':
+          return info?.authorMeta?.fans ?? null
+        case 'twitter':
+          return info?.author?.followers ?? null
+        case 'youtube':
+          return info?.aboutChannelInfo?.numberOfSubscribers ?? null
+        default:
+          return null
+      }
+    } catch (error) {
+      console.error(`Error extracting followers for ${platform}:`, error)
+      return null
+    }
+  }
 
   const handleSearch = async () => {
     if (!brand || !platform || !region || !aiModel) {
@@ -64,6 +128,35 @@ export default function TestPage() {
       if (data.url && data.url.trim() !== '') {
         setResult(data.url)
         toast.success('URL Found!')
+
+        // 根据平台调用对应的 Apify API
+        const followersRes = await fetch(`/api/apify/${platform}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(getRequestBody(data.url, platform))
+        })
+
+        if (!followersRes.ok) {
+          const followersErrorText = await followersRes.text()
+          console.error('Followers API Response Error:', {
+            status: followersRes.status,
+            statusText: followersRes.statusText,
+            error: followersErrorText
+          })
+          throw new Error(`Followers API Request Failed: ${followersRes.status} ${followersRes.statusText}`)
+        }
+
+        const followersData = await followersRes.json()
+        console.log('Followers API Response Data:', followersData)
+
+        const followerCount = extractFollowersCount(followersData, platform)
+        if (followerCount !== null) {
+          setFollowers(followerCount)
+          toast.success(`Followers Count: ${followerCount}`)
+        } else {
+          setFollowers(null)
+          toast.error('Failed to extract followers count')
+        }
       } else {
         console.log('URL not found, API Response:', data)
         setResult('')
@@ -195,6 +288,11 @@ export default function TestPage() {
               >
                 {result}
               </a>
+              {followers !== null && (
+                <div>
+                  <h4>Followers Count: {followers}</h4>
+                </div>
+              )}
             </div>
           )}
         </div>

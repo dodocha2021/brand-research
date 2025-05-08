@@ -2,33 +2,60 @@
 
 ## Overview
 
-This project is a full-stack web application for **brand competitor research, data enrichment, and AI-powered email generation**. It is designed to help marketing, sales, and research teams quickly analyze a brand's competitive landscape, enrich competitor data, and generate personalized outreach emails using advanced AI models (Anthropic Claude, OpenAI GPT-4o, etc.).
+This project is a full-stack web application for **brand competitor research, data enrichment, social media scraping, and AI-powered email generation**. It helps marketing, sales, and research teams quickly:
 
-## Features
+- Identify and summarize direct competitors across multiple channels.  
+- Enrich competitor data with URLs, metadata, and social media metrics.  
+- Scrape competitor social media profiles (Instagram, LinkedIn, TikTok, Twitter, YouTube).  
+- Generate personalized outreach emails using a variety of AI models.  
+- Manage search history and edit data via an intuitive UI.  
+- Switch between light/dark theme and customize email templates.
+
+## Key Features
 
 - **Brand Competitor Search**  
-  Enter a brand name and region to automatically research and summarize the top direct competitors using GPT-4o-mini and GPT-4o.
+  Enter a brand name and region to research top competitors via GPT-4o-mini and GPT-4o.
 
 - **Competitor Data Enrichment**  
-  Edit, add, and manage competitor information (brand, region, competitor name, platform, URL, etc.) in a user-friendly table.  
-  Auto-fill competitor URLs using AI.
+  - Edit/add competitor info (brand, region, platform, URL, etc.) in a table.  
+  - AI-powered URL inference and content completion.
+
+- **Social Media Scraping**  
+  Automatically scrape competitor profiles and followers from:  
+  - Instagram  
+  - LinkedIn  
+  - TikTok  
+  - Twitter  
+  - YouTube  
+  (powered by Apify)
 
 - **History & Data Management**  
-  View and manage all previous competitor searches and results in a searchable history page.
+  View, search, and restore previous competitor analysis sessions.
 
 - **AI-Powered Email Generation**  
-  Select a template, fill in brand and competitor data, and generate high-quality, data-driven outreach emails using Anthropic Claude.  
-  Supports custom templates and JSON data input.
+  - Support for Anthropic Claude, OpenAI GPT-4o, Google GPT, Perplexity.  
+  - Customizable templates with JSON data injection.  
+  - Live email editor with preview and light/dark mode.
 
-- **Multi-language Support**  
-  All user-facing content is in English for international usability.
+- **Theme Toggle**  
+  Switch between light and dark UI themes on the fly.
+
+- **Multi-Model AI Integration**  
+  - Anthropic Claude  
+  - OpenAI GPT-4o  
+  - Google GPT  
+  - Perplexity
 
 ## Tech Stack
 
-- **Frontend:** React (Next.js), Tailwind CSS
-- **Backend:** Next.js API routes, Supabase (PostgreSQL)
-- **AI Integration:** OpenAI GPT-4o, Anthropic Claude
-- **Other:** React Hot Toast, React Markdown
+- **Frontend:** React (Next.js 14), Tailwind CSS 4  
+- **Backend:** Next.js API Routes, Supabase (PostgreSQL engine)  
+- **Scraping:** Apify client (`@apify/client`)  
+- **AI/ML Integration:**  
+  - **Large Language Models:** OpenAI GPT-4o, Anthropic Claude, Google GPT, Perplexity  
+  - **Agents & SDKs:** `@anthropic-ai/sdk`, `@apify/client`, `perplexity-api`  
+- **Utilities:** SWR, React Hot Toast, React Markdown  
+- **Tooling:** ESLint, Prettier, PostCSS, Autoprefixer
 
 ## Quick Start
 
@@ -44,7 +71,16 @@ This project is a full-stack web application for **brand competitor research, da
    ```
 
 3. **Configure environment variables**  
-   Copy `.env.example` to `.env.local` and fill in your API keys for OpenAI, Anthropic, Supabase, etc.
+   Copy `.env.example` to `.env.local` and fill in:
+   ```dotenv
+   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+   ANTHROPIC_API_KEY=your_anthropic_key
+   OPENAI_API_KEY=your_openai_key
+   GOOGLE_GPT_API_KEY=your_google_gpt_key
+   PERPLEXITY_API_KEY=your_perplexity_key
+   APIFY_TOKEN=your_apify_token
+   ```
 
 4. **Run the development server**
    ```bash
@@ -52,93 +88,78 @@ This project is a full-stack web application for **brand competitor research, da
    ```
 
 5. **Open your browser**  
-   Visit [http://localhost:3000](http://localhost:3000) to use the app.
+   Visit [http://localhost:3000](http://localhost:3000)
 
 ## Folder Structure
 
-- `app/` — Main Next.js app, including pages and API routes
-- `lib/` — Utility functions and prompts
-- `public/` — Static assets
-- `README.md` — Project documentation
+
+
+app/
+api/
+anthropic/
+openai/
+google-gpt/
+perplexity/
+apify/
+instagram/
+linkedin/
+tiktok/
+twitter/
+youtube/
+competitor-history/
+simple-mode/
+history/
+simple-mode/
+competitor-scrape/
+competitor-result/
+email-editor/
+ThemeToggle.tsx
+layout.tsx
+globals.css
+lib/
+prompts.ts
+supabase.ts
+supabase-utils.ts
+apify-client.ts
+public/
+favicon.ico
+...
+README.md
+
+
+## Pages
+
+- `/` (Home)  
+  - Brand competitor search entry point.  
+  - Input brand name and region to run deep research via GPT-4o-mini and GPT-4o.  
+  - Edit/add/delete competitors, save and navigate to the result page.
+
+- `/history` (Search History)  
+  - View and group all past search records.  
+  - Paginate, expand/collapse each search session to see detailed tables.
+
+- `/simple-mode` (Simple Mode)  
+  - One-click simplified workflow.  
+  - Step-by-step: create search session, analyze competitors, extract URLs, scrape followers, generate email.  
+  - Built-in progress bar and debug logs.
+
+- `/competitor-scrape` (Competitor Scrape)  
+  - Batch scrape social media data for selected records (Instagram, LinkedIn, TikTok, Twitter, YouTube).  
+  - Edit mode to modify fields and save changes back to the database.
+
+- `/competitor-result` (Competitor Result)  
+  - Display competitor search history and expand “all platform” rows into multiple platform entries.  
+  - Auto-fill URLs via GPT prompts, edit, and save the final data.
+
+- `/email-editor` (Email Editor)  
+  - Select or customize email templates based on historical competitor data.  
+  - Insert variables, attach JSON data, and preview in Markdown.  
+  - Generate final email content with Anthropic Claude and view past results.
 
 ## Screenshots
 
-> _You can add screenshots here to illustrate the workflow: competitor search, data editing, email generation, etc._
+
 
 ## License
 
 MIT
-
-# 🧠 Brand Competitor Analysis Platform  
-*A Cognitive Architecture for Competitive Intelligence Synthesis, Market Signal Enrichment, and Autonomous Outreach Communication*
-
-## 🧭 Executive Synopsis
-
-The **Brand Competitor Analysis Platform** is a state-of-the-art, full-stack intelligence system architected to enable **asymmetric market mapping, multimodal data enrichment**, and **large language model–orchestrated outreach synthesis**. This platform empowers marketing analysts, sales strategists, and research operatives to operationalize competitive insights and automate B2B engagement pipelines through artificial general intelligence.
-
-## 🚀 Key Capabilities
-
-- ### **Semantic Competitor Identification**
-  Leverages GPT-4o (OpenAI) and Claude (Anthropic) to execute zero-shot and few-shot inference tasks for identifying and summarizing top competitors across geographic and vertical taxonomies.
-
-- ### **Context-Aware Entity Enrichment**
-  Facilitates structured editing and augmentation of competitive datasets (brand name, market region, platform footprint, URLs, etc.) via an intuitive, schema-aligned interface.  
-  Includes LLM-enabled URL inference and content completion.
-
-- ### **Temporal Knowledge Archival**
-  Employs persistent vector and relational storage (Supabase/PostgreSQL) to construct a queryable historical ledger of all analytic sessions and strategic outputs.
-
-- ### **Generative Outreach Fabrication**
-  Incorporates transformer-based architectures to synthesize hyper-personalized outreach templates. Supports custom templates with structured JSON injection and multilingual surface realization.
-
-- ### **Internationalization-Ready**
-  Optimized for global operability; all user interactions default to English to ensure consistency across geopolitical deployments.
-
-## 🧬 Technical Substrate
-
-- **Frontend:** React (via Next.js 14), Tailwind CSS 4  
-- **Backend:** Next.js API Routes, Supabase (PostgreSQL engine)  
-- **AI/ML Integration:**  
-  - **Large Language Models:** OpenAI GPT-4o, Anthropic Claude  
-  - **Enrichment Agents:** `@anthropic-ai/sdk`, `apify-client`  
-- **Data Flow & UX:** SWR, React Hot Toast, React Markdown  
-- **Ecosystem Tooling:** ESlint, Tailwind PostCSS, Autoprefixer  
-
-## 🛠️ Deployment Protocol
-
-1. **Repository Initialization**
-   ```bash
-   git clone <repository-url>
-   cd brand-research
-   ```
-
-2. **Dependency Injection**
-   ```bash
-   npm install
-   ```
-
-3. **Environment Provisioning**  
-   Replicate `.env.example` to `.env.local` and provision credentials for OpenAI, Anthropic, Supabase, etc.
-
-4. **Local Node Activation**
-   ```bash
-   npm run dev
-   ```
-
-5. **System Interface Engagement**  
-   Navigate to: [http://localhost:3000](http://localhost:3000)
-
-## 📁 System Taxonomy
-
-- `app/` — Next.js composable interface modules & API routes  
-- `lib/` — Domain-specific utilities, prompt engineering templates  
-- `public/` — Static resources and marketing assets  
-- `README.md` — Meta-documentation for onboarding and comprehension
-
-## 🖼️ Visual Intelligence (Pending)
-
-_Screenshots and interface demonstrations to be appended upon visual stabilization._
-
-## 📜 License
-
-Released under the MIT License — permissive and enterprise-ready.
