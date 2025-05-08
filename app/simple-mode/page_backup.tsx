@@ -22,24 +22,6 @@ type Item = {
   followers?: number | null
 }
 
-type ScrapedItem = {
-  name: string
-  platform: string
-  url: string
-  followers: number | null
-  success: boolean
-  error?: string
-}
-
-type ScrapeFollowersResponse = {
-  results: ScrapedItem[]
-  summary: {
-    total: number
-    successful: number
-    failed: number
-  }
-}
-
 // 每个步骤对应的目标百分比
 const statusPercent: Record<Step, number> = {
   idle: 0,
@@ -113,16 +95,9 @@ export default function SimpleModePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brandName }),
       })
-
-      if (!createRes.ok) {
-        const errorText = await createRes.text()
-        throw new Error(`Create search failed: ${errorText}`)
-      }
-
       const createJson = await createRes.json()
       setDebugResponses(prev => [...prev, { step: 'create-search', data: createJson }])
       const id = createJson.searchId
-      if (!id) throw new Error('No search ID returned')
       setSearchId(id)
 
       // 2. Analyse competitors
@@ -132,17 +107,8 @@ export default function SimpleModePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ brandName, searchId: id }),
       })
-
-      if (!compRes.ok) {
-        const errorText = await compRes.text()
-        throw new Error(`Analyse competitors failed: ${errorText}`)
-      }
-
-      const compJson = await compRes.json()
+      const compJson = (await compRes.json()) as { competitors: string[] }
       setDebugResponses(prev => [...prev, { step: 'analyse-competitors', data: compJson }])
-      if (!Array.isArray(compJson.competitors)) {
-        throw new Error('Invalid competitors data received')
-      }
       setCompetitors(compJson.competitors)
 
       // 3. Build items list
@@ -152,7 +118,7 @@ export default function SimpleModePage() {
       const usePlatforms = platformSelection === 'all platform' ? allPlatforms : [platformSelection]
       const compItems: Item[] = compJson.competitors
         .slice(1)
-        .flatMap((name: string) => usePlatforms.map(p => ({ name, platform: p })))
+        .flatMap(name => usePlatforms.map(p => ({ name, platform: p })))
       const allItems: Item[] = [...brandPlatforms, ...compItems]
       setItems(allItems)
 
@@ -164,13 +130,7 @@ export default function SimpleModePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
         })
-
-        if (!urlRes.ok) {
-          const errorText = await urlRes.text()
-          throw new Error(`Extract URL failed for ${it.platform}: ${errorText}`)
-        }
-
-        const urlJson = await urlRes.json()
+        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string }
         setDebugResponses(prev => [
           ...prev,
           { step: `extract-url:${it.platform}`, data: urlJson },
@@ -186,19 +146,8 @@ export default function SimpleModePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ items: itemsWithUrl, searchId: id }),
       })
-
-      if (!scrapeRes.ok) {
-        const errorText = await scrapeRes.text()
-        throw new Error(`Scrape followers failed: ${errorText}`)
-      }
-
-      const scrapeJson = await scrapeRes.json() as ScrapeFollowersResponse
+      const scrapeJson = (await scrapeRes.json()) as { results: Item[] }
       setDebugResponses(prev => [...prev, { step: 'scrape-followers', data: scrapeJson }])
-      
-      if (scrapeJson.summary.failed > 0) {
-        console.warn(`${scrapeJson.summary.failed} items failed to scrape`)
-      }
-
       setItems(scrapeJson.results)
 
       // 6. Generate email
@@ -213,20 +162,13 @@ export default function SimpleModePage() {
           contactName,
         }),
       })
-
-      if (!emailRes.ok) {
-        const errorText = await emailRes.text()
-        throw new Error(`Generate email failed: ${errorText}`)
-      }
-
-      const emailJson = await emailRes.json()
+      const emailJson = (await emailRes.json()) as { content: string }
       setDebugResponses(prev => [...prev, { step: 'generate-email', data: emailJson }])
       setEmailContent(emailJson.content)
 
       setStep('done')
       toast.success('Email generated!')
     } catch (err: any) {
-      console.error('Error in handleGenerateEmail:', err)
       setErrorInfo(err.message)
       setStep('error')
       toast.error('Error: ' + err.message)
