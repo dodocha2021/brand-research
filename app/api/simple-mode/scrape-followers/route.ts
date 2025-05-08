@@ -24,11 +24,11 @@ interface RetryResult<T> {
 
 // 优化后的重试配置
 const DEFAULT_RETRY_OPTIONS: RetryOptions = {
-  maxRetries: 5,          // 增加重试次数
-  initialDelay: 2000,     // 增加初始延迟
-  maxDelay: 20000,        // 增加最大延迟
-  backoff: 2,
-  timeout: 60000         // 增加超时时间
+  maxRetries: 3,          // 设置最大重试次数为 3
+  initialDelay: 2000,     // 初始延迟时间（毫秒）
+  maxDelay: 20000,        // 最大延迟时间（毫秒）
+  backoff: 2,             // 指数退避因子
+  timeout: 180000         // 设置超时时间为 3 分钟（180000 毫秒）
 }
 
 // 重试函数
@@ -59,14 +59,6 @@ async function retryWithTimeout<T>(
     } catch (error) {
       console.error(`Attempt ${attempts} failed:`, error)
       
-      if (attempts === options.maxRetries) {
-        return {
-          success: false,
-          error,
-          attempts
-        }
-      }
-
       // 指数退避策略
       delay = Math.min(delay * options.backoff, options.maxDelay)
       console.log(`Retrying in ${delay}ms... (Attempt ${attempts + 1} of ${options.maxRetries})`)
@@ -239,11 +231,11 @@ export async function POST(req: NextRequest) {
               item.url,
               baseUrl,
               {
-                maxRetries: 5,
+                maxRetries: 3, // 设置最大重试次数为 3
                 initialDelay: 2000,
                 maxDelay: 20000,
                 backoff: 2,
-                timeout: 60000
+                timeout: 180000 // 设置超时时间为 3 分钟
               }
             )
             const followers = extractFollowersCount(item.platform, data)

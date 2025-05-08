@@ -113,6 +113,7 @@ export default function SimpleModePage() {
       if (timerRef.current !== null) clearInterval(timerRef.current)
     }
   }, [step])
+
   const handleGenerateEmail = async () => {
     try {
       setTerminalLogs([]) // 清空之前的日志
@@ -274,6 +275,7 @@ export default function SimpleModePage() {
       toast.error('Error: ' + err.message)
     }
   }
+
   return (
     <div className="container" style={{ position: 'relative' }}>
       {/* 版本号 */}
