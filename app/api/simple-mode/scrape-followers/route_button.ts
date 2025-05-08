@@ -69,22 +69,17 @@ async function fetchFollowersFromApify(
 const fetchWithTimeout = (fn: () => Promise<any>, timeout: number) => {
   return Promise.race([
     fn(),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), timeout)
-    )
-  ])
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeout))
+  ]);
 }
 
 export async function POST(req: NextRequest) {
   let searchId: string | undefined
   try {
-    // 修改：从请求体中解析出 ignoreIncomplete 标志，以便用户决定如何处理部分无效数据
-    const payload = (await req.json()) as {
+    const { items, searchId: id } = (await req.json()) as {
       items?: Entry[]
       searchId?: string
-      ignoreIncomplete?: boolean
     }
-    const { items, searchId: id, ignoreIncomplete } = payload
     if (!Array.isArray(items) || !id) {
       return NextResponse.json(
         { error: 'Missing items array or searchId' },
@@ -111,87 +106,49 @@ export async function POST(req: NextRequest) {
     const results = await Promise.all(
       items.map(async item => {
         try {
-          const data = await fetchWithTimeout(
-            () => fetchFollowersFromApify(item.platform, item.url, baseUrl),
-            60000
-          )
-          const followers = extractFollowersCount(item.platform, data)
-          return { ...item, followers, success: true }
-        } catch (e: any) {
-          console.error('Apify error:', e)
-          return { ...item, followers: null, success: false, error: e.message }
+          const data = await fetchWithTimeout(() => fetchFollowersFromApify(item.platform, item.url, baseUrl), 60000);
+          const followers = extractFollowersCount(item.platform, data);
+          return { ...item, followers, success: true };
+        } catch (e: unknown) {
+          if (e instanceof Error) {
+            console.error('Apify error:', e);
+            return { ...item, followers: null, success: false, error: e.message };
+          } else {
+            console.error('Apify error: Unknown error type');
+            return { ...item, followers: null, success: false, error: 'Unknown error' };
+          }
         }
       })
-    )
+    );
 
-    // 4. 根据 followers 的状态判断如何存入数据库
-    // 如果所有结果均有效：followers 非 null 且 > 200，则直接存入全部数据
-    const allValid = results.every(r => r.followers !== null && r.followers > 200)
-    if (allValid) {
-      const rows = results.map(r => ({
+    // 4. 过滤非空并插入 simple_search_history
+    const valid = results.filter(r => r.followers != null);
+    if (valid.length > 0) {
+      const rows = valid.map(r => ({
         search_id: searchId,
         competitor_name: r.name,
         platform: r.platform,
         url: r.url,
         fans_count: r.followers
-      }))
+      }));
       const { error: insertErr } = await supabase
         .from('simple_search_history')
-        .insert(rows)
+        .insert(rows);
       if (insertErr) {
-        console.error('Supabase insert error:', insertErr)
-      }
-      return NextResponse.json({ results, inserted: true })
-    } else {
-      // 如果存在无效数据（followers 为 null 或者不大于200）
-      if (ignoreIncomplete) {
-        // 用户选择忽略无效数据，则过滤掉无效数据后存入数据库
-        const validRows = results.filter(r => r.followers !== null && r.followers > 200)
-        if (validRows.length === 0) {
-          return NextResponse.json(
-            { error: 'There is no valid data to be stored.' },
-            { status: 400 }
-          )
-        }
-        const rows = validRows.map(r => ({
-          search_id: searchId,
-          competitor_name: r.name,
-          platform: r.platform,
-          url: r.url,
-          fans_count: r.followers
-        }))
-        const { error: insertErr } = await supabase
-          .from('simple_search_history')
-          .insert(rows)
-        if (insertErr) {
-          console.error('Supabase insert error:', insertErr)
-        }
-        return NextResponse.json({
-          results,
-          inserted: true,
-          ignoredCount: results.length - validRows.length
-        })
-      } else {
-        // 否则返回响应告知前端：存在无效数据，需要用户选择单一路径重试或忽略这些数据
-        return NextResponse.json(
-          {
-            results,
-            message: 'Invalid data exists, please select Retry a single link or ignore this invalid data.',
-            needUserAction: true
-          },
-          { status: 206 }
-        )
+        console.error('Supabase insert error:', insertErr);
       }
     }
+
+    return NextResponse.json({ results });
   } catch (e: any) {
-    console.error('scrape-followers POST error:', e)
+    console.error('scrape-followers POST error:', e);
     // 出错时将 searches.status 更新为 'failed'
     if (searchId) {
       try {
         await supabase
           .from('searches')
           .update({ status: 'failed' })
-          .eq('id', searchId)
+          .eq('id', searchId);
       } catch (_) {
         // ignore
       }
@@ -199,25 +156,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: e.message || 'Internal error' },
       { status: 500 }
-    )
+    );
   }
 }
 
 // 从 Apify 返回的数据中提取关注者数量
 function extractFollowersCount(platform: string, data: any): number | null {
-  const info = Array.isArray(data) ? data[0] : data
+  const info = Array.isArray(data) ? data[0] : data;
   switch (platform) {
     case 'instagram':
-      return info?.followersCount ?? null
+      return info?.followersCount ?? null;
     case 'linkedin':
-      return info?.stats?.follower_count ?? null
+      return info?.stats?.follower_count ?? null;
     case 'tiktok':
-      return info?.authorMeta?.fans ?? null
+      return info?.authorMeta?.fans ?? null;
     case 'twitter':
-      return info?.author?.followers ?? null
+      return info?.author?.followers ?? null;
     case 'youtube':
-      return info?.aboutChannelInfo?.numberOfSubscribers ?? null
+      return info?.aboutChannelInfo?.numberOfSubscribers ?? null;
     default:
-      return null
+      return null;
   }
 }

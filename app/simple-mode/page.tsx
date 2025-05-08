@@ -20,27 +20,11 @@ type Item = {
   platform: string
   url?: string
   followers?: number | null
-}
-
-type ScrapedItem = {
-  name: string
-  platform: string
-  url: string
-  followers: number | null
-  success: boolean
+  success?: boolean
   error?: string
 }
 
-type ScrapeFollowersResponse = {
-  results: ScrapedItem[]
-  summary: {
-    total: number
-    successful: number
-    failed: number
-  }
-}
-
-// 每个步骤对应的目标百分比
+// Percentage target for each step
 const statusPercent: Record<Step, number> = {
   idle: 0,
   creating: 10,
@@ -53,26 +37,16 @@ const statusPercent: Record<Step, number> = {
 }
 
 export default function SimpleModePage() {
-  // 版本号
+  // Version number
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
-  const [terminalLogs, setTerminalLogs] = useState<string[]>([])
-  const logWindowRef = useRef<HTMLDivElement>(null)
-
   useEffect(() => {
     fetch(
       'https://raw.githubusercontent.com/dodocha2021/brand-research/main/package.json'
     )
-      .then(res => res.json())
-      .then(data => setGithubVersion(data.version || null))
+      .then((res) => res.json())
+      .then((data) => setGithubVersion(data.version || null))
       .catch(() => setGithubVersion(null))
   }, [])
-
-  // 自动滚动日志窗口到底部
-  useEffect(() => {
-    if (logWindowRef.current) {
-      logWindowRef.current.scrollTop = logWindowRef.current.scrollHeight
-    }
-  }, [terminalLogs])
 
   const [step, setStep] = useState<Step>('idle')
   const [progress, setProgress] = useState<number>(0)
@@ -91,16 +65,23 @@ export default function SimpleModePage() {
   const [emailContent, setEmailContent] = useState<string>('')
   const [debugResponses, setDebugResponses] = useState<{ step: string; data: any }[]>([])
 
-  // 定时器引用，用于平滑进度
+  // New state: when invalid data exists, require user action
+  const [needUserAction, setNeedUserAction] = useState<boolean>(false)
+  // Save invalid items for displaying retry options
+  const [incompleteItems, setIncompleteItems] = useState<Item[]>([])
+  // New state: indices of items currently retrying
+  const [retryingIndices, setRetryingIndices] = useState<number[]>([])
+
+  // Timer reference for smooth progress updates
   const timerRef = useRef<number | null>(null)
 
-  // 当步骤变更时，平滑推进进度条
+  // Update progress bar when step changes
   useEffect(() => {
     const target = statusPercent[step]
     if (timerRef.current !== null) clearInterval(timerRef.current)
     if (target > progress) {
       timerRef.current = window.setInterval(() => {
-        setProgress(prev => {
+        setProgress((prev) => {
           if (prev < target) return prev + 1
           if (timerRef.current !== null) clearInterval(timerRef.current)
           return prev
@@ -114,171 +95,203 @@ export default function SimpleModePage() {
     }
   }, [step])
 
-  const handleGenerateEmail = async () => {
+  // Handle retry for a single URL with interactive feedback
+  const handleRetry = async (item: Item, index: number) => {
+    // Mark this item as retrying
+    setRetryingIndices((prev) => [...prev, index])
     try {
-      setTerminalLogs([]) // 清空之前的日志
-
-      // 1. Create search session
-      setStep('creating')
-      setTerminalLogs(prev => [...prev, `Creating search session for brand: ${brandName}`])
-      const createRes = await fetch('/api/simple-mode/create-search', {
+      const retryRes = await fetch('/api/simple-mode/scrape-followers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandName }),
+        body: JSON.stringify({ items: [item], searchId }),
       })
-
-      if (!createRes.ok) {
-        const errorText = await createRes.text()
-        throw new Error(`Create search failed: ${errorText}`)
-      }
-
-      const createJson = await createRes.json()
-      setDebugResponses(prev => [...prev, { step: 'create-search', data: createJson }])
-      const id = createJson.searchId
-      if (!id) throw new Error('No search ID returned')
-      setSearchId(id)
-      setTerminalLogs(prev => [...prev, `Search session created with ID: ${id}`])
-
-      // 2. Analyse competitors
-      setStep('analysing')
-      setTerminalLogs(prev => [...prev, `Analyzing competitors for ${brandName}`])
-      const compRes = await fetch('/api/simple-mode/analyse-competitors', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brandName, searchId: id }),
-      })
-
-      if (!compRes.ok) {
-        const errorText = await compRes.text()
-        throw new Error(`Analyse competitors failed: ${errorText}`)
-      }
-
-      const compJson = await compRes.json()
-      setDebugResponses(prev => [...prev, { step: 'analyse-competitors', data: compJson }])
-      if (!Array.isArray(compJson.competitors)) {
-        throw new Error('Invalid competitors data received')
-      }
-      setCompetitors(compJson.competitors)
-      setTerminalLogs(prev => [...prev, `Found ${compJson.competitors.length - 1} competitors`])
-
-      // 3. Build items list
-      setStep('extracting')
-      const allPlatforms = ['instagram', 'linkedin', 'tiktok', 'twitter', 'youtube'] as const
-      const brandPlatforms: Item[] = allPlatforms.map(p => ({ name: brandName, platform: p }))
-      const usePlatforms = platformSelection === 'all platform' ? allPlatforms : [platformSelection]
-      const compItems: Item[] = compJson.competitors
-        .slice(1)
-        .flatMap((name: string) => usePlatforms.map(p => ({ name, platform: p })))
-      const allItems: Item[] = [...brandPlatforms, ...compItems]
-      setItems(allItems)
-      setTerminalLogs(prev => [...prev, `Building items list for ${usePlatforms.join(', ')}`])
-
-      // 4. Extract URLs
-      const itemsWithUrl: Item[] = []
-      for (const it of allItems) {
-        setTerminalLogs(prev => [...prev, `Extracting URL for ${it.name} on ${it.platform}`])
-        const urlRes = await fetch('/api/simple-mode/extract-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
-        })
-
-        if (!urlRes.ok) {
-          const errorText = await urlRes.text()
-          throw new Error(`Extract URL failed for ${it.platform}: ${errorText}`)
-        }
-
-        const urlJson = await urlRes.json()
-        setDebugResponses(prev => [
-          ...prev,
-          { step: `extract-url:${it.platform}`, data: urlJson },
-        ])
-        itemsWithUrl.push({ ...it, url: urlJson.url })
-        setTerminalLogs(prev => [...prev, `Found URL: ${urlJson.url}`])
-      }
-      setItems(itemsWithUrl)
-
-      // 5. Scrape followers
-      setStep('scraping')
-      setTerminalLogs(prev => [...prev, 'Starting to scrape followers data...'])
-
-      // 添加所有要抓取的 URL 信息
-      itemsWithUrl.forEach(item => {
-        setTerminalLogs(prev => [...prev, `Fetching ${item.platform} data for URL: ${item.url}`])
-      })
-
-      const scrapeRes = await fetch('/api/simple-mode/scrape-followers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsWithUrl, searchId: id }),
-      })
-
-      if (!scrapeRes.ok) {
-        const errorText = await scrapeRes.text()
-        throw new Error(`Scrape followers failed: ${errorText}`)
-      }
-
-      const scrapeJson = await scrapeRes.json() as ScrapeFollowersResponse
-      setDebugResponses(prev => [...prev, { step: 'scrape-followers', data: scrapeJson }])
-
-      // 添加每个平台的抓取结果
-      scrapeJson.results.forEach(result => {
-        const statusMessage = result.success 
-          ? `Successfully scraped ${result.platform} for ${result.name}: ${result.followers} followers`
-          : `Failed to scrape ${result.platform} for ${result.name}${result.error ? `: ${result.error}` : ''}`
-        setTerminalLogs(prev => [...prev, statusMessage])
-      })
-
-      if (scrapeJson.summary.failed > 0) {
-        const message = `${scrapeJson.summary.failed} items failed to scrape`
-        console.warn(message)
-        setTerminalLogs(prev => [...prev, `Warning: ${message}`])
-      }
-
-      setItems(scrapeJson.results)
-      setTerminalLogs(prev => [
-        ...prev, 
-        `Scraping completed: ${scrapeJson.summary.successful} successful, ${scrapeJson.summary.failed} failed`
+      const retryJson = await retryRes.json()
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: `scrape-followers-retry (${item.platform})`, data: retryJson },
       ])
+      const newItem: Item = retryJson.results[0]
+      // Update the item in state
+      setItems((prev) =>
+        prev.map((it) =>
+          it.platform === item.platform && it.name === item.name ? newItem : it
+        )
+      )
+      // Update incompleteItems; if all items become valid, proceed
+      setIncompleteItems((prev) => {
+        const updated = prev.map((it, i) => (i === index ? newItem : it))
+        const filtered = updated.filter(
+          (it) =>
+            it.followers === undefined || it.followers === null || it.followers <= 200
+        )
+        if (filtered.length === 0) {
+          setNeedUserAction(false)
+          handleGenerateEmailAfterScraping()
+        }
+        return updated
+      })
+    } catch (e: any) {
+      toast.error('Retry failed: ' + e.message)
+    } finally {
+      // Remove the index from retryingIndices once the retry is completed
+      setRetryingIndices((prev) => prev.filter((i) => i !== index))
+    }
+  }
 
-      // 6. Generate email
+  // Handle ignoring all invalid data
+  const handleIgnoreAll = async () => {
+    try {
+      const ignoreRes = await fetch('/api/simple-mode/scrape-followers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items, searchId, ignoreIncomplete: true }),
+      })
+      const ignoreJson = await ignoreRes.json()
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: 'scrape-followers-ignoreAll', data: ignoreJson },
+      ])
+      setNeedUserAction(false)
+      setItems(ignoreJson.results)
+      // Continue to generate email
+      handleGenerateEmailAfterScraping()
+    } catch (e: any) {
+      toast.error('Ignore failed: ' + e.message)
+    }
+  }
+
+  // Generate email after successful scraping (all data valid)
+  const handleGenerateEmailAfterScraping = async () => {
+    try {
       setStep('generating')
-      setTerminalLogs(prev => [...prev, 'Generating email content...'])
       const emailRes = await fetch('/api/simple-mode/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          searchId: id,
+          searchId,
           selectedTemplate: template,
           customTemplate: '',
           contactName,
         }),
       })
-
-      if (!emailRes.ok) {
-        const errorText = await emailRes.text()
-        throw new Error(`Generate email failed: ${errorText}`)
-      }
-
-      const emailJson = await emailRes.json()
-      setDebugResponses(prev => [...prev, { step: 'generate-email', data: emailJson }])
+      const emailJson = (await emailRes.json()) as { content: string }
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: 'generate-email', data: emailJson },
+      ])
       setEmailContent(emailJson.content)
-      setTerminalLogs(prev => [...prev, 'Email content generated successfully'])
-
       setStep('done')
-      toast.success('Email generated!')
+      toast.success('Email generated successfully!')
     } catch (err: any) {
-      console.error('Error in handleGenerateEmail:', err)
       setErrorInfo(err.message)
       setStep('error')
-      setTerminalLogs(prev => [...prev, `Error: ${err.message}`])
+      toast.error('Error: ' + err.message)
+    }
+  }
+
+  // Main process: create search, analyze competitors, extract URLs, scrape followers,
+  // and decide if user intervention is required
+  const handleGenerateEmail = async () => {
+    try {
+      // Step 1: Create search session
+      setStep('creating')
+      const createRes = await fetch('/api/simple-mode/create-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandName }),
+      })
+      const createJson = await createRes.json()
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: 'create-search', data: createJson },
+      ])
+      const id = createJson.searchId
+      setSearchId(id)
+
+      // Step 2: Analyze competitors
+      setStep('analysing')
+      const compRes = await fetch('/api/simple-mode/analyse-competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brandName, searchId: id }),
+      })
+      const compJson = (await compRes.json()) as { competitors: string[] }
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: 'analyse-competitors', data: compJson },
+      ])
+      setCompetitors(compJson.competitors)
+
+      // Step 3: Build items list
+      setStep('extracting')
+      const allPlatforms = ['instagram', 'linkedin', 'tiktok', 'twitter', 'youtube'] as const
+      const brandPlatforms: Item[] = allPlatforms.map((p) => ({ name: brandName, platform: p }))
+      const usePlatforms =
+        platformSelection === 'all platform' ? allPlatforms : [platformSelection]
+      const compItems: Item[] = compJson.competitors
+        .slice(1)
+        .flatMap((name) => usePlatforms.map((p) => ({ name, platform: p })))
+      const allItems: Item[] = [...brandPlatforms, ...compItems]
+
+      // Step 4: Extract URLs
+      const itemsWithUrl: Item[] = []
+      for (const it of allItems) {
+        const urlRes = await fetch('/api/simple-mode/extract-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
+        })
+        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string }
+        setDebugResponses((prev) => [
+          ...prev,
+          { step: `extract-url:${it.platform}`, data: urlJson },
+        ])
+        itemsWithUrl.push({ ...it, url: urlJson.url })
+      }
+      setItems(itemsWithUrl)
+
+      // Step 5: Scrape followers data
+      setStep('scraping')
+      const scrapeRes = await fetch('/api/simple-mode/scrape-followers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsWithUrl, searchId: id }),
+      })
+      const scrapeJson = await scrapeRes.json()
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: 'scrape-followers', data: scrapeJson },
+      ])
+
+      // If invalid data is detected, require user action
+      if (scrapeJson.needUserAction) {
+        setNeedUserAction(true)
+        setIncompleteItems(
+          scrapeJson.results.filter(
+            (item: Item) =>
+              item.followers === undefined ||
+              item.followers === null ||
+              item.followers <= 200
+          )
+        )
+        setItems(scrapeJson.results)
+        return
+      } else {
+        setItems(scrapeJson.results)
+      }
+
+      // Step 6: Generate email
+      handleGenerateEmailAfterScraping()
+    } catch (err: any) {
+      setErrorInfo(err.message)
+      setStep('error')
       toast.error('Error: ' + err.message)
     }
   }
 
   return (
     <div className="container" style={{ position: 'relative' }}>
-      {/* 版本号 */}
+      {/* Version number */}
       <div
         style={{
           position: 'fixed',
@@ -291,7 +304,7 @@ export default function SimpleModePage() {
         {githubVersion ? `Version: ${githubVersion}` : 'Version: loading...'}
       </div>
 
-      {/* 主题切换 */}
+      {/* Theme toggle */}
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <ThemeToggle />
       </div>
@@ -300,13 +313,13 @@ export default function SimpleModePage() {
 
       {step === 'idle' && (
         <div className="card">
-          {/* 输入表单 */}
+          {/* Input form */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 4 }}>Target Brand Name:</label>
             <input
               type="text"
               value={brandName}
-              onChange={e => setBrandName(e.target.value)}
+              onChange={(e) => setBrandName(e.target.value)}
               style={{ width: '100%', padding: 8 }}
             />
           </div>
@@ -316,7 +329,7 @@ export default function SimpleModePage() {
             <input
               type="text"
               value={contactName}
-              onChange={e => setContactName(e.target.value)}
+              onChange={(e) => setContactName(e.target.value)}
               style={{ width: '100%', padding: 8 }}
             />
           </div>
@@ -325,7 +338,7 @@ export default function SimpleModePage() {
             <label style={{ display: 'block', marginBottom: 4 }}>Template:</label>
             <select
               value={template}
-              onChange={e => setTemplate(e.target.value as any)}
+              onChange={(e) => setTemplate(e.target.value as any)}
               style={{ width: '100%', padding: 8 }}
             >
               <option value="YouTube Prospecting">YouTube Prospecting</option>
@@ -337,7 +350,7 @@ export default function SimpleModePage() {
             <label style={{ display: 'block', marginBottom: 4 }}>Search Platform for Competitors:</label>
             <select
               value={platformSelection}
-              onChange={e =>
+              onChange={(e) =>
                 setPlatformSelection(
                   e.target.value as
                     | 'all platform'
@@ -367,7 +380,7 @@ export default function SimpleModePage() {
 
       {step !== 'idle' && (
         <div className="card">
-          {/* 进度条 */}
+          {/* Progress bar */}
           <div style={{ marginBottom: 16 }}>
             <div
               style={{
@@ -391,31 +404,7 @@ export default function SimpleModePage() {
             </p>
           </div>
 
-          {/* 终端日志窗口 */}
-          <div
-            ref={logWindowRef}
-            style={{
-              background: '#1e1e1e',
-              color: '#fff',
-              fontFamily: 'monospace',
-              padding: '12px',
-              borderRadius: '4px',
-              height: '200px',
-              overflowY: 'auto',
-              marginBottom: '16px',
-              fontSize: '12px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all'
-            }}
-          >
-            {terminalLogs.map((log, index) => (
-              <div key={index} style={{ marginBottom: '4px', color: log.includes('Error:') ? '#ff6b6b' : log.includes('Warning:') ? '#ffd93d' : '#fff' }}>
-                {log}
-              </div>
-            ))}
-          </div>
-
-          {/* 分析结果 */}
+          {/* Analysis results */}
           {step === 'analysing' && (
             <ul>
               {competitors.map((c, i) => (
@@ -424,12 +413,61 @@ export default function SimpleModePage() {
             </ul>
           )}
 
-          {/* 错误 */}
+          {/* Error */}
           {step === 'error' && <p style={{ color: 'red' }}>Error: {errorInfo}</p>}
         </div>
       )}
 
-      {/* 完成后展示邮件 */}
+      {/* When user action is required, display invalid items with retry options */}
+      {needUserAction && (
+        <div className="card">
+          <h3>Invalid Data Detected – Action Required</h3>
+          <p>
+            The following items have invalid data (followers are null or not greater than 200).
+            Please choose to retry for each link individually or ignore all invalid data:
+          </p>
+          <ul style={{ listStyle: 'none', padding: 0 }}>
+            {incompleteItems.map((item, index) => (
+              <li
+                key={index}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: '8px'
+                }}
+              >
+                <span>
+                  Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
+                  {item.followers === null ? 'null' : item.followers}
+                </span>
+                {item.followers !== undefined &&
+                item.followers !== null &&
+                item.followers >= 200 ? (
+                  <span style={{ padding: '4px 8px', fontSize: '0.8rem' }}>✅</span>
+                ) : (
+                  <button
+                    onClick={() => handleRetry(item, index)}
+                    disabled={retryingIndices.includes(index)}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.8rem',
+                      backgroundColor: retryingIndices.includes(index) ? '#ccc' : undefined
+                    }}
+                  >
+                    {retryingIndices.includes(index) ? 'Retrying...' : 'Retry'}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <button onClick={handleIgnoreAll} className="search-btn">
+            Ignore Invalid Data & Next
+          </button>
+        </div>
+      )}
+
+      {/* Display generated email */}
       {step === 'done' && (
         <div className="card">
           <h2>Generated Email</h2>
@@ -439,24 +477,29 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* 调试信息 */}
+      {/* Debug responses */}
       <div className="card">
         <h3>Debug Responses</h3>
-        {debugResponses.map((dbg, idx) => (
-          <div key={idx} style={{ marginBottom: 12 }}>
-            <strong>{dbg.step}:</strong>
-            <pre
-              style={{
-                whiteSpace: 'pre-wrap',
-                background: '#fff',
-                padding: 8,
-                borderRadius: 4,
-              }}
-            >
-              {JSON.stringify(dbg.data, null, 2)}
-            </pre>
-          </div>
-        ))}
+        <div
+          style={{
+            background: 'black',
+            color: '#39FF14',
+            padding: '8px',
+            height: '200px',
+            overflowY: 'auto',
+            fontFamily: 'monospace',
+            resize: 'vertical'
+          }}
+        >
+          {debugResponses.map((dbg, idx) => (
+            <div key={idx} style={{ marginBottom: '12px' }}>
+              <strong>{dbg.step}:</strong>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                {JSON.stringify(dbg.data, null, 2)}
+              </pre>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
