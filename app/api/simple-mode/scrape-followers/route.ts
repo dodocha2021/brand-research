@@ -53,9 +53,9 @@ async function fetchFollowersFromApify(
       break
     case 'youtube':
       body = {
-        maxResultStreams: 0,
+        maxResultStreams: 1,
         maxResults: 1,
-        maxResultsShorts: 0,
+        maxResultsShorts: 1,
         sortVideosBy: 'POPULAR',
         startUrls: [{ url, method: 'GET' }]
       }
@@ -79,16 +79,6 @@ async function fetchFollowersFromApify(
     throw new Error(`Apify fetch failed: ${res.status}`);
   }
   return res.json();
-}
-
-// 超时处理函数
-const fetchWithTimeout = (fn: () => Promise<any>, timeout: number) => {
-  return Promise.race([
-    fn(),
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timed out')), timeout)
-    )
-  ])
 }
 
 export async function POST(req: NextRequest) {
@@ -127,10 +117,7 @@ export async function POST(req: NextRequest) {
     const results = await Promise.all(
       items.map(async item => {
         try {
-          const data = await fetchWithTimeout(
-            () => fetchFollowersFromApify(item.platform, item.url, baseUrl),
-            60000
-          )
+          const data = await fetchFollowersFromApify(item.platform, item.url, baseUrl)
           const followers = extractFollowersCount(item.platform, data)
           return { ...item, followers, success: true }
         } catch (e: any) {
@@ -177,7 +164,7 @@ export async function POST(req: NextRequest) {
           {
             results,
             message:
-              '部分数据无效，但符合要求的记录已自动上传到数据库。请对无效链接进行单独 Retry 或选择忽略这些无效数据。',
+              'Some data entries were invalid, but the matching records have been uploaded to the database. Please retry the invalid links individually or choose to ignore them.',
             needUserAction: true
           },
           { status: 206 }

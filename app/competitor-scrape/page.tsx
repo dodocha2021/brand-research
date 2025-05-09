@@ -126,9 +126,9 @@ export default function CompetitorScrapePage() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                maxResultStreams: 0,
+                maxResultStreams: 1,
                 maxResults: 1,
-                maxResultsShorts: 0,
+                maxResultsShorts: 1,
                 sortVideosBy: 'POPULAR',
                 startUrls: [
                   {
@@ -251,9 +251,9 @@ export default function CompetitorScrapePage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            maxResultStreams: 0,
+            maxResultStreams: 1,
             maxResults: 1,
-            maxResultsShorts: 0,
+            maxResultsShorts: 1,
             sortVideosBy: 'POPULAR',
             startUrls: [
               {
