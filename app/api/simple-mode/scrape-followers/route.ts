@@ -219,7 +219,4 @@ function extractFollowersCount(platform: string, data: any): number | null {
   }
 }
 
-export const config = {
-  runtime: 'nodejs',
-  functions: { background: true },
-};
+export const runtime = 'nodejs';
