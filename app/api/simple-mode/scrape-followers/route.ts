@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
+if (!process.env.APIFY_TOKEN) {
+  throw new Error('Missing APIFY_TOKEN: please set APIFY_TOKEN in Vercel Environment Variables');
+}
+
 type Entry = {
   name: string
   url: string
@@ -58,11 +62,19 @@ async function fetchFollowersFromApify(
 
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${process.env.APIFY_TOKEN}`,
+    },
+    body: JSON.stringify(body),
   })
-  if (!res.ok) throw new Error(`Apify fetch failed: ${res.status}`)
-  return res.json()
+  if (res.status === 402) {
+    throw new Error('Apify payment required (HTTP 402): check your APIFY_TOKEN and account credits');
+  }
+  if (!res.ok) {
+    throw new Error(`Apify fetch failed: ${res.status}`);
+  }
+  return res.json();
 }
 
 // 超时处理函数
@@ -206,3 +218,8 @@ function extractFollowersCount(platform: string, data: any): number | null {
       return null
   }
 }
+
+export const config = {
+  runtime: 'nodejs',
+  functions: { background: true },
+};
