@@ -75,6 +75,9 @@ export default function SimpleModePage() {
   // Timer reference for smooth progress updates
   const timerRef = useRef<number | null>(null)
 
+  // Ref for debug responses container to auto-scroll
+  const debugContainerRef = useRef<HTMLDivElement>(null)
+
   // Update progress bar when step changes
   useEffect(() => {
     const target = statusPercent[step]
@@ -94,6 +97,13 @@ export default function SimpleModePage() {
       if (timerRef.current !== null) clearInterval(timerRef.current)
     }
   }, [step])
+
+  // Auto-scroll debug responses to bottom on update
+  useEffect(() => {
+    if (debugContainerRef.current) {
+      debugContainerRef.current.scrollTop = debugContainerRef.current.scrollHeight
+    }
+  }, [debugResponses])
 
   // Handle retry for a single URL with interactive feedback
   const handleRetry = async (item: Item, index: number) => {
@@ -477,6 +487,7 @@ export default function SimpleModePage() {
       <div className="card">
         <h3>Debug Responses</h3>
         <div
+          ref={debugContainerRef}
           style={{
             background: 'black',
             color: '#39FF14',
