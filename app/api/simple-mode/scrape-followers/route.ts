@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-if (!process.env.APIFY_TOKEN) {
-  throw new Error('Missing APIFY_TOKEN: please set APIFY_TOKEN in Vercel Environment Variables');
-}
+// 支持两种环境变量名：APIFY_TOKEN 或 APIFY_API_KEY
+const APIFY_TOKEN = process.env.APIFY_TOKEN || process.env.APIFY_API_KEY;
 
 type Entry = {
   name: string
@@ -17,6 +16,11 @@ async function fetchFollowersFromApify(
   url: string,
   baseUrl: string
 ): Promise<any> {
+  if (!APIFY_TOKEN) {
+    throw new Error(
+      'Missing Apify API key: please set APIFY_TOKEN or APIFY_API_KEY in your environment'
+    );
+  }
   const endpoint = `${baseUrl}/api/apify/${platform}`
   let body: any = {}
   switch (platform) {
@@ -64,7 +68,7 @@ async function fetchFollowersFromApify(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${process.env.APIFY_TOKEN}`,
+      'Authorization': `Bearer ${APIFY_TOKEN}`,
     },
     body: JSON.stringify(body),
   })
