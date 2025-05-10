@@ -1,213 +1,233 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 
-// 支持两种环境变量名：APIFY_TOKEN 或 APIFY_API_KEY
-const APIFY_TOKEN = process.env.APIFY_TOKEN || process.env.APIFY_API_KEY;
-
-type Entry = {
-  name: string
-  url: string
-  platform: string
-}
-
-// 调用 Apify Wrapper 路由，获取原始数据
-async function fetchFollowersFromApify(
-  platform: string,
-  url: string,
-  baseUrl: string
-): Promise<any> {
-  if (!APIFY_TOKEN) {
-    throw new Error(
-      'Missing Apify API key: please set APIFY_TOKEN or APIFY_API_KEY in your environment'
-    );
-  }
-  const endpoint = `${baseUrl}/api/apify/${platform}`
-  let body: any = {}
-  switch (platform) {
-    case 'instagram':
-      body = { usernames: [url] }
-      break
-    case 'linkedin':
-      body = { identifier: url }
-      break
-    case 'tiktok':
-      body = {
-        excludePinnedPosts: false,
-        profiles: [url],
-        resultsPerPage: 1,
-        shouldDownloadAvatars: false,
-        shouldDownloadCovers: true,
-        shouldDownloadSlideshowImages: false,
-        shouldDownloadSubtitles: false,
-        shouldDownloadVideos: false,
-        profileScrapeSections: ['videos'],
-        profileSorting: 'latest'
-      }
-      break
-    case 'twitter':
-      body = {
-        maxItems: 1,
-        sort: 'Latest',
-        startUrls: [url]
-      }
-      break
-    case 'youtube':
-      body = {
-        maxResultStreams: 1,
-        maxResults: 1,
-        maxResultsShorts: 1,
-        sortVideosBy: 'POPULAR',
-        startUrls: [{ url, method: 'GET' }]
-      }
-      break
-    default:
-      throw new Error('Unsupported platform')
-  }
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${APIFY_TOKEN}`,
-    },
-    body: JSON.stringify(body),
-  })
-  if (res.status === 402) {
-    throw new Error('Apify payment required (HTTP 402): check your APIFY_TOKEN and account credits');
-  }
-  if (!res.ok) {
-    throw new Error(`Apify fetch failed: ${res.status}`);
-  }
-  return res.json();
-}
+export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  let searchId: string | undefined
-  try {
-    // 从请求体中解析出 ignoreIncomplete 标志，以便用户决定如何处理部分无效数据
-    const payload = (await req.json()) as {
-      items?: Entry[]
-      searchId?: string
-      ignoreIncomplete?: boolean
+  /* 1. 解析 payload -------------------------------------------------------- */
+  const { items, searchId } = (await req.json()) as {
+    items?: { url: string; platform: string; name: string }[]
+    searchId?: string
+  }
+  if (!Array.isArray(items) || !searchId) {
+    return NextResponse.json({ error: 'Missing items or searchId' }, { status: 400 })
+  }
+
+  /* 2. 标记 search 状态 ---------------------------------------------------- */
+  await supabase.from('searches').update({ status: 'scraping' }).eq('id', searchId)
+
+  /* 3. 启动所有 Task ------------------------------------------------------- */
+  // 使用 Promise.allSettled 替代 Promise.all，确保即使部分任务失败，其他任务仍能继续
+  const runPromises = items.map(async (item) => {
+    if (!item.url || item.url.trim() === '') {
+      console.log(`Skipping empty URL: ${item.name} - ${item.platform}`);
+      return { 
+        platform: item.platform, 
+        name: item.name, 
+        status: 'skipped', 
+        success: false,
+        message: 'Empty URL, skipped',
+        followers: null
+      };
     }
-    const { items, searchId: id, ignoreIncomplete } = payload
-    if (!Array.isArray(items) || !id) {
-      return NextResponse.json(
-        { error: 'Missing items array or searchId' },
-        { status: 400 }
-      )
+    
+    const origin = req.nextUrl.origin
+    const apiEndpoint = new URL(`/api/apify/${item.platform}`, origin).href
+    
+    // 针对不同平台定制payload
+    let payload: any;
+    switch (item.platform) {
+      case 'instagram':
+        payload = { usernames: [item.url] };
+        break;
+      case 'linkedin':
+        payload = { identifier: [item.url] };
+        break;
+      case 'tiktok':
+        payload = {
+          excludePinnedPosts: false,
+          profiles: [item.url],
+          resultsPerPage: 1,
+          shouldDownloadAvatars: false,
+          shouldDownloadCovers: true,
+          shouldDownloadSlideshowImages: false,
+          shouldDownloadSubtitles: false,
+          shouldDownloadVideos: false,
+          profileScrapeSections: ['videos'],
+          profileSorting: 'latest'
+        };
+        break;
+      case 'twitter':
+        payload = {
+          maxItems: 1,
+          sort: 'Latest',
+          startUrls: [item.url]
+        };
+        break;
+      case 'youtube':
+        payload = {
+          maxResultStreams: 1,
+          maxResults: 1,
+          maxResultsShorts: 1,
+          sortVideosBy: 'POPULAR',
+          startUrls: [{ url: item.url, method: 'GET' }]
+        };
+        break;
+      default:
+        payload = { url: item.url };
     }
-    searchId = id
-
-    // 更新 searches.status 为 'scraping'
-    const { error: updErr } = await supabase
-      .from('searches')
-      .update({ status: 'scraping' })
-      .eq('id', searchId)
-    if (updErr) {
-      console.error('Failed to update status to scraping:', updErr)
-    }
-
-    // 构造 baseUrl，用于调用内部 Apify 路由
-    const proto = req.headers.get('x-forwarded-proto') || 'http'
-    const host = req.headers.get('host')
-    const baseUrl = `${proto}://${host}`
-
-    // 并行调用 Apify 提取 followers
-    const results = await Promise.all(
-      items.map(async item => {
-        try {
-          const data = await fetchFollowersFromApify(item.platform, item.url, baseUrl)
-          const followers = extractFollowersCount(item.platform, data)
-          return { ...item, followers, success: true }
-        } catch (e: any) {
-          console.error('Apify error:', e)
-          return { ...item, followers: null, success: false, error: e.message }
-        }
-      })
-    )
-
-    // 修改逻辑：无论结果如何，都先过滤出符合要求的记录（followers 非 null 且 > 200）并自动上传到数据库
-    const validRowsData = results.filter(r => r.followers !== null && r.followers > 200)
-    if (validRowsData.length > 0) {
-      const rows = validRowsData.map(r => ({
-        search_id: searchId,
-        competitor_name: r.name,
-        platform: r.platform,
-        url: r.url,
-        fans_count: r.followers
-      }))
-      // 直接插入新数据，不做合并更新，重复数据会插入多条记录
-      const { error: insertErr } = await supabase
-        .from('simple_search_history')
-        .insert(rows)
-      if (insertErr) {
-        console.error('Supabase insert error:', insertErr)
+    
+    try {
+      console.log(`Starting ${item.platform} task, URL: ${item.url}`);
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(90000) // 90 seconds timeout
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Failed to start ${item.platform} task, status code: ${response.status}, error:`, errorText);
+        return { 
+          platform: item.platform, 
+          name: item.name, 
+          status: 'failed', 
+          success: false,
+          message: `API call failed (${response.status}): ${errorText}`,
+          followers: null
+        };
       }
+      
+      const result = await response.json();
+      // Extract followers field
+      const info = Array.isArray(result) ? result[0] : result;
+      let followers = null;
+      switch (item.platform) {
+        case 'instagram':
+          followers = info?.followersCount ?? null;
+          break;
+        case 'linkedin':
+          followers = info?.stats?.follower_count ?? null;
+          break;
+        case 'tiktok':
+          followers = info?.authorMeta?.fans ?? null;
+          break;
+        case 'twitter':
+          followers = info?.author?.followers ?? null;
+          break;
+        case 'youtube':
+          followers = info?.aboutChannelInfo?.numberOfSubscribers ?? null;
+          break;
+        default:
+          followers = null;
+      }
+      console.log(`Successfully started ${item.platform} task, followers:`, followers);
+      console.log(`Scraping result: competitor_name=${item.name}, platform=${item.platform}, url=${item.url}, fans_count=${followers}`);
+      return { 
+        ...result, 
+        platform: item.platform, 
+        name: item.name,
+        url: item.url,
+        status: 'started',
+        success: true,
+        followers
+      };
+    } catch (error: any) {
+      const errorMessage = error.message || 'Unknown error';
+      const errorCause = error.cause ? `(reason: ${error.cause.message || error.cause})` : '';
+      console.error(`${item.platform} task error: ${errorMessage} ${errorCause}`, error);
+      console.error(`Scraping failed: competitor_name=${item.name}, platform=${item.platform}, url=${item.url}, fans_count=null, error=${errorMessage}`);
+      return { 
+        platform: item.platform, 
+        name: item.name, 
+        url: item.url,
+        status: 'error', 
+        success: false,
+        message: `Request error: ${errorMessage} ${errorCause}`,
+        error: errorMessage,
+        followers: null
+      };
     }
+  });
 
-    // 根据结果判断返回情况
-    if (results.every(r => r.followers !== null && r.followers > 200)) {
-      // 情况1：所有记录均有效，全部数据已上传
-      return NextResponse.json({ results, inserted: true })
+  // 使用 Promise.allSettled 替代 Promise.all，确保所有任务都会被处理
+  const results = await Promise.allSettled(runPromises);
+  
+  // 整理结果
+  const runs = results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return result.value;
     } else {
-      if (ignoreIncomplete) {
-        // 情况2：用户选择忽略无效数据时，前端只保留有效数据
-        return NextResponse.json({
-          results,
-          inserted: true,
-          ignoredCount: results.length - validRowsData.length
-        })
-      } else {
-        // 情况3：存在无效记录，需要用户对单条记录进行 retry 或选择忽略
-        return NextResponse.json(
-          {
-            results,
-            message:
-              'Some data entries were invalid, but the matching records have been uploaded to the database. Please retry the invalid links individually or choose to ignore them.',
-            needUserAction: true
-          },
-          { status: 206 }
-        )
-      }
+      // Promise 本身拒绝（如超时错误）
+      return {
+        platform: items[index].platform,
+        name: items[index].name,
+        url: items[index].url,
+        status: 'error',
+        success: false,
+        message: `Task processing failed: ${result.reason?.message || 'Unknown error'}`,
+        error: result.reason,
+        followers: null
+      };
     }
-  } catch (e: any) {
-    console.error('scrape-followers POST error:', e)
-    // 出错时将 searches.status 更新为 'failed'
-    if (searchId) {
-      try {
-        await supabase
-          .from('searches')
-          .update({ status: 'failed' })
-          .eq('id', searchId)
-      } catch (_) {
-        // ignore
-      }
+  });
+  
+  /* 4. 统计任务状态并返回结果 --------------------------------------------- */
+  const successTasks = runs.filter(run => run.success === true).length;
+  const failedTasks = runs.length - successTasks;
+  
+  console.log(`Task results: Total: ${runs.length}, Success: ${successTasks}, Failed: ${failedTasks}`);
+  
+  // 输出所有结果的汇总表格
+  console.log("\nScraping Results Summary:");
+  console.log("competitor_name | platform | url | fans_count | success");
+  console.log("---------------|----------|-----|------------|--------");
+  runs.forEach(run => {
+    console.log(`${run.name} | ${run.platform} | ${run.url || 'N/A'} | ${run.followers || 'null'} | ${run.success ? '✓' : '✗'}`);
+  });
+  
+  // 在处理完任务结果后，将数据写入数据库
+  const validRowsData = runs.filter(run => run.followers !== null && run.followers > 200);
+
+  if (validRowsData.length > 0) {
+    const rows = validRowsData.map(run => ({
+      search_id: searchId,
+      competitor_name: run.name,
+      platform: run.platform,
+      url: run.url,
+      fans_count: run.followers
+    }));
+
+    console.log('Ready to insert data into database:', rows);
+
+    const { error: insertErr } = await supabase.from('simple_search_history').insert(rows);
+
+    if (insertErr) {
+      console.error('Supabase insert error:', insertErr);
+    } else {
+      console.log('Data successfully inserted into the database.');
     }
-    return NextResponse.json(
-      { error: e.message || 'Internal error' },
-      { status: 500 }
-    )
+  } else {
+    console.log('No valid data to insert into database.');
   }
-}
 
-// 从 Apify 返回的数据中提取关注者数量
-function extractFollowersCount(platform: string, data: any): number | null {
-  const info = Array.isArray(data) ? data[0] : data
-  switch (platform) {
-    case 'instagram':
-      return info?.followersCount ?? null
-    case 'linkedin':
-      return info?.stats?.follower_count ?? null
-    case 'tiktok':
-      return info?.authorMeta?.fans ?? null
-    case 'twitter':
-      return info?.author?.followers ?? null
-    case 'youtube':
-      return info?.aboutChannelInfo?.numberOfSubscribers ?? null
-    default:
-      return null
-  }
-}
+  const failedRuns = runs.filter(run => !run.success);
+  const incompleteItems = runs.filter(run => 
+    !run.success || run.followers === null || run.followers <= 200
+  );
+  
+  // 检查是否需要用户操作（任务失败或者followers为空或小于等于200）
+  const needUserAction = incompleteItems.length > 0;
 
-export const runtime = 'nodejs';
+  return NextResponse.json({
+    status: failedTasks === runs.length ? 'all_failed' : (successTasks === runs.length ? 'all_started' : 'partial_started'),
+    taskCount: runs.length,
+    successCount: successTasks,
+    failedCount: failedTasks,
+    results: runs,
+    failedDetails: failedRuns,
+    needUserAction,
+    incompleteItems 
+  });
+}

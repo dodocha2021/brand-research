@@ -1,4 +1,3 @@
-// app/simple-mode/page.tsx
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
@@ -108,13 +107,9 @@ export default function SimpleModePage() {
 
   // Handle retry for a single URL with interactive feedback
   const handleRetry = async (item: Item, index: number) => {
+    // Mark this item as retrying
     setRetryingIndices((prev) => [...prev, index])
     try {
-      // 如果searchId存在，保存到localStorage
-      if (searchId) {
-        localStorage.setItem('currentSearchId', searchId);
-      }
-      
       const retryRes = await fetch('/api/simple-mode/scrape-followers', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -126,11 +121,13 @@ export default function SimpleModePage() {
         { step: `scrape-followers-retry (${item.platform})`, data: retryJson },
       ])
       const newItem: Item = retryJson.results[0]
+      // Update the item in state
       setItems((prev) =>
         prev.map((it) =>
           it.platform === item.platform && it.name === item.name ? newItem : it
         )
       )
+      // Update incompleteItems; if all items become valid, proceed
       setIncompleteItems((prev) => {
         const updated = prev.map((it, i) => (i === index ? newItem : it))
         const filtered = updated.filter(
@@ -146,18 +143,15 @@ export default function SimpleModePage() {
     } catch (e: any) {
       toast.error('Retry failed: ' + e.message)
     } finally {
+      // Remove the index from retryingIndices once the retry is completed
       setRetryingIndices((prev) => prev.filter((i) => i !== index))
     }
   }
 
-  // Handle ignore-all: keep only valid items
+  // 修改 handleIgnoreAll: 当点击 ignore 时，只保留已经更新为有效的数据，而不删除 retry 后更新的数据
   const handleIgnoreAll = async () => {
     try {
-      // 如果searchId存在，保存到localStorage
-      if (searchId) {
-        localStorage.setItem('currentSearchId', searchId);
-      }
-      
+      // 保留那些已经有效（followers 非空且大于等于200）的记录
       const validItems = items.filter(
         (item: Item) =>
           item.followers !== undefined &&
@@ -172,55 +166,25 @@ export default function SimpleModePage() {
     }
   }
 
-  // Generate email after successful scraping
+  // Generate email after successful scraping (all data valid)
   const handleGenerateEmailAfterScraping = async () => {
     try {
       setStep('generating')
-      
-      // 如果searchId为空，尝试从localStorage获取
-      let currentSearchId = searchId;
-      if (!currentSearchId) {
-        const storedSearchId = localStorage.getItem('currentSearchId');
-        if (storedSearchId) {
-          console.log('Restored searchId from localStorage:', storedSearchId);
-          setSearchId(storedSearchId);
-          currentSearchId = storedSearchId;
-        }
-      }
-      
-      console.log('Generating email, searchId:', currentSearchId);
-      if (!currentSearchId) {
-        console.error('Warning: searchId is empty!');
-        toast.error('Error: Search ID does not exist, cannot generate email');
-        setStep('error');
-        setErrorInfo('Search ID does not exist, cannot generate email');
-        return;
-      }
-      
       const emailRes = await fetch('/api/simple-mode/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          searchId: currentSearchId,
+          searchId,
           selectedTemplate: template,
           customTemplate: '',
           contactName,
         }),
       })
-      const emailJson = (await emailRes.json()) as { content: string, error?: string }
+      const emailJson = (await emailRes.json()) as { content: string }
       setDebugResponses((prev) => [
         ...prev,
         { step: 'generate-email', data: emailJson },
       ])
-      
-      if (emailJson.error) {
-        console.error('Email generation failed:', emailJson.error);
-        setErrorInfo(emailJson.error);
-        setStep('error');
-        toast.error('Error: ' + emailJson.error);
-        return;
-      }
-      
       setEmailContent(emailJson.content)
       setStep('done')
       toast.success('Email generated successfully!')
@@ -231,9 +195,11 @@ export default function SimpleModePage() {
     }
   }
 
-  // Main process
+  // Main process: create search, analyze competitors, extract URLs, scrape followers,
+  // and decide if user intervention is required
   const handleGenerateEmail = async () => {
     try {
+      // Step 1: Create search session
       setStep('creating')
       const createRes = await fetch('/api/simple-mode/create-search', {
         method: 'POST',
@@ -247,10 +213,8 @@ export default function SimpleModePage() {
       ])
       const id = createJson.searchId
       setSearchId(id)
-      
-      // 保存searchId到localStorage以便恢复
-      localStorage.setItem('currentSearchId', id);
 
+      // Step 2: Analyze competitors
       setStep('analysing')
       const compRes = await fetch('/api/simple-mode/analyse-competitors', {
         method: 'POST',
@@ -264,6 +228,7 @@ export default function SimpleModePage() {
       ])
       setCompetitors(compJson.competitors)
 
+      // Step 3: Build items list
       setStep('extracting')
       const allPlatforms = ['instagram', 'linkedin', 'tiktok', 'twitter', 'youtube'] as const
       const brandPlatforms: Item[] = allPlatforms.map((p) => ({ name: brandName, platform: p }))
@@ -274,6 +239,7 @@ export default function SimpleModePage() {
         .flatMap((name) => usePlatforms.map((p) => ({ name, platform: p })))
       const allItems: Item[] = [...brandPlatforms, ...compItems]
 
+      // Step 4: Extract URLs
       const itemsWithUrl: Item[] = []
       for (const it of allItems) {
         const urlRes = await fetch('/api/simple-mode/extract-url', {
@@ -290,6 +256,7 @@ export default function SimpleModePage() {
       }
       setItems(itemsWithUrl)
 
+      // Step 5: Scrape followers data
       setStep('scraping')
       const scrapeRes = await fetch('/api/simple-mode/scrape-followers', {
         method: 'POST',
@@ -302,30 +269,24 @@ export default function SimpleModePage() {
         { step: 'scrape-followers', data: scrapeJson },
       ])
 
-      // 检查是否有无效或失败的任务，需要用户干预
+      // If invalid data is detected, require user action
       if (scrapeJson.needUserAction) {
         setNeedUserAction(true)
-        // 使用后端返回的incompleteItems，如果存在的话
-        if (scrapeJson.incompleteItems && scrapeJson.incompleteItems.length > 0) {
-          setIncompleteItems(scrapeJson.incompleteItems);
-        } else {
-          // 向后兼容：过滤出无效项
-          setIncompleteItems(
-            scrapeJson.results.filter(
-              (item: Item) =>
-                !item.success || 
-                item.followers === undefined ||
-                item.followers === null || 
-                item.followers <= 200
-            )
-          );
-        }
+        setIncompleteItems(
+          scrapeJson.results.filter(
+            (item: Item) =>
+              item.followers === undefined ||
+              item.followers === null ||
+              item.followers <= 200
+          )
+        )
         setItems(scrapeJson.results)
         return
       } else {
         setItems(scrapeJson.results)
       }
 
+      // Step 6: Generate email
       handleGenerateEmailAfterScraping()
     } catch (err: any) {
       setErrorInfo(err.message)
@@ -463,13 +424,13 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* When user action is required */}
+      {/* When user action is required, display invalid items with retry options */}
       {needUserAction && (
         <div className="card">
-          <h3>Invalid Data Detected - Action Required</h3>
+          <h3>Invalid Data Detected – Action Required</h3>
           <p>
             The following items have invalid data (followers are null or not greater than 200).
-            Please retry each link individually or ignore all invalid data:
+            Please choose to retry for each link individually or ignore all invalid data:
           </p>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {incompleteItems.map((item, index) => (
@@ -507,7 +468,7 @@ export default function SimpleModePage() {
             ))}
           </ul>
           <button onClick={handleIgnoreAll} className="search-btn">
-            Ignore Invalid Data & Continue
+            Ignore Invalid Data & Next
           </button>
         </div>
       )}
@@ -518,51 +479,6 @@ export default function SimpleModePage() {
           <h2>Generated Email</h2>
           <div style={{ background: '#f3f4f6', padding: 16, borderRadius: 4 }}>
             <ReactMarkdown>{emailContent}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-
-      {/* Results Summary */}
-      {items.length > 0 && step !== 'idle' && (
-        <div className="card">
-          <h3>Scraping Results Summary</h3>
-          <div style={{
-            overflowX: 'auto',
-            fontFamily: 'monospace',
-            fontSize: '14px'
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>Brand</th>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>Platform</th>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>URL</th>
-                  <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>Followers</th>
-                  <th style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid #ddd' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => (
-                  <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white' }}>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>{item.name}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>{item.platform}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.url ? (
-                        <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ wordBreak: 'break-all', maxWidth: '300px', display: 'inline-block' }}>
-                          {item.url.substring(0, 40)}{item.url.length > 40 ? '...' : ''}
-                        </a>
-                      ) : 'N/A'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.followers === undefined || item.followers === null ? 'N/A' : item.followers.toLocaleString()}
-                    </td>
-                    <td style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.success ? '✅' : '❌'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
