@@ -7,23 +7,76 @@ export async function POST(req: NextRequest) {
   }
 
   const input = await req.json()
+  
+  // 简化的输入参数，只提取关键必要信息
+  const optimizedInput = {
+    maxResultStreams: 1,      // 不需要直播
+    maxResults: 1,            // 只需要1个视频结果
+    maxResultsShorts: 1,      // 不需要短视频
+    includeAboutInfo: true,   // 确保包含关于页面信息(包含订阅者数)
+    shouldDownloadVideos: false, // 不下载视频
+    shouldDownloadSubtitles: false, // 不下载字幕
+    shouldDownloadSlideshowImages: false, // 不下载幻灯片图片
+    shouldDownloadCovers: false, // 不下载封面
+    sortVideosBy: "POPULAR",   // 按热门排序
+    startUrls: input.startUrls || []
+  };
+  
+  console.log('Optimized YouTube request:', JSON.stringify(optimizedInput));
+  
   try {
+    // 设置更短的超时时间，避免长时间等待
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+    
     const res = await fetch(
       `https://api.apify.com/v2/actor-tasks/ai.labs~youtube-channel-scraper-brand/run-sync-get-dataset-items?token=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(input)
+        body: JSON.stringify(optimizedInput),
+        signal: controller.signal
       }
-    )
+    );
+    
+    clearTimeout(timeoutId);
+    
     const raw = await res.text()
     try {
       const data = JSON.parse(raw)
+      
+      // 提取关键信息，减少返回数据量
+      if (Array.isArray(data) && data.length > 0) {
+        const channelInfo = {
+          aboutChannelInfo: data[0].aboutChannelInfo,
+          channelName: data[0].channelName,
+          channelUrl: data[0].channelUrl,
+          numberOfSubscribers: data[0].aboutChannelInfo?.numberOfSubscribers || null
+        };
+        
+        return NextResponse.json(channelInfo, { status: res.status })
+      }
+      
       return NextResponse.json(data, { status: res.status })
     } catch (e) {
       return NextResponse.json({ error: 'Response is not JSON', raw, status: res.status }, { status: 500 })
     }
   } catch (e: any) {
-    return NextResponse.json({ error: e.message }, { status: 500 })
+    // 特别处理超时错误
+    if (e.name === 'AbortError') {
+      return NextResponse.json({ 
+        error: 'Request timeout',
+        aboutChannelInfo: {
+          numberOfSubscribers: null
+        }
+      }, { status: 408 })
+    }
+    
+    return NextResponse.json({ 
+      error: e.message,
+      aboutChannelInfo: {
+        numberOfSubscribers: null
+      }
+    }, { status: 500 })
   }
 }

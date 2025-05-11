@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     // 3. 从 searches 表读取原始品牌
     const { data: searchData, error: searchErr } = await supabase
       .from('searches')
-      .select('original_brand')
+      .select('original_brand, status')
       .eq('id', searchId)
       .single()
     if (searchErr || !searchData) {
@@ -91,7 +91,13 @@ export async function POST(req: NextRequest) {
     // 检查是否有足够的数据进行分析
     if (!rows || rows.length === 0) {
       console.error('没有找到任何社交媒体数据');
-      throw new Error('No social media data found for this search. Please ensure scraping completed successfully.');
+      
+      // 检查当前搜索状态，如果仍在进行中，提示用户等待
+      if (searchData.status === 'scraping') {
+        throw new Error('搜索仍在进行中，请稍后再试。数据正在通过webhook异步处理。');
+      } else {
+        throw new Error('No social media data found for this search. Please ensure scraping completed successfully.');
+      }
     }
 
     // 5. 构造 JSON 数据供 AI 分析
@@ -158,8 +164,8 @@ export async function POST(req: NextRequest) {
     });
   } catch (e: any) {
     console.error('generate-email POST error:', e);
-    // 出错时更新状态为 failed
-    if (searchId) {
+    // 出错时更新状态为 failed，除非是数据还未准备好的情况
+    if (searchId && !e.message.includes('搜索仍在进行中')) {
       try {
         await supabase
           .from('searches')

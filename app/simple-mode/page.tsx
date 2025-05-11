@@ -1,7 +1,6 @@
-// app/simple-mode/page.tsx
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { toast } from 'react-hot-toast'
 import ReactMarkdown from 'react-markdown'
 import ThemeToggle from '@/app/ThemeToggle'
@@ -17,15 +16,18 @@ type Step =
   | 'error'
 
 type Item = {
+  id: string
   name: string
   platform: string
   url?: string
   followers?: number | null
   success?: boolean
   error?: string
+  actorRunId?: string
+  defaultDatasetId?: string
+  fans_count?: number | null
 }
 
-// Percentage target for each step
 const statusPercent: Record<Step, number> = {
   idle: 0,
   creating: 10,
@@ -38,7 +40,9 @@ const statusPercent: Record<Step, number> = {
 }
 
 export default function SimpleModePage() {
-  // Version number
+  const [, updateState] = useState<object>({})
+  const forceUpdate = useCallback(() => updateState({}), [])
+
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
   useEffect(() => {
     fetch(
@@ -66,20 +70,21 @@ export default function SimpleModePage() {
   const [emailContent, setEmailContent] = useState<string>('')
   const [debugResponses, setDebugResponses] = useState<{ step: string; data: any }[]>([])
 
-  // New state: when invalid data exists, require user action
+  // 用户介入相关
   const [needUserAction, setNeedUserAction] = useState<boolean>(false)
-  // Save invalid items for displaying retry options
   const [incompleteItems, setIncompleteItems] = useState<Item[]>([])
-  // New state: indices of items currently retrying
   const [retryingIndices, setRetryingIndices] = useState<number[]>([])
 
-  // Timer reference for smooth progress updates
-  const timerRef = useRef<number | null>(null)
+  // scraping 轮询相关
+  const [scrapingPolling, setScrapingPolling] = useState<boolean>(false)
 
-  // Ref for debug responses container to auto-scroll
+  // 添加状态来跟踪webhook第一次通知的时间
+  const [firstWebhookTime, setFirstWebhookTime] = useState<number | null>(null);
+  const [checkCompleted, setCheckCompleted] = useState<boolean>(false);
+
+  const timerRef = useRef<number | null>(null)
   const debugContainerRef = useRef<HTMLDivElement>(null)
 
-  // Update progress bar when step changes
   useEffect(() => {
     const target = statusPercent[step]
     if (timerRef.current !== null) clearInterval(timerRef.current)
@@ -99,70 +104,211 @@ export default function SimpleModePage() {
     }
   }, [step])
 
-  // Auto-scroll debug responses to bottom on update
   useEffect(() => {
     if (debugContainerRef.current) {
       debugContainerRef.current.scrollTop = debugContainerRef.current.scrollHeight
     }
   }, [debugResponses])
 
-  // Handle retry for a single URL with interactive feedback
+  // 在现有的轮询效果中添加逻辑
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout;
+    
+    if (scrapingPolling && searchId) {
+      const currentTime = Date.now();
+      
+      // 常规轮询，检查是否有任何webhook通知到达
+      timeoutId = setTimeout(async () => {
+        try {
+          // 获取当前数据状态
+          const res = await fetch('/api/simple-mode/get-competitor-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchId })
+          });
+          const data = await res.json();
+          
+          // 更新items状态
+          setItems(data.items);
+          
+          // 检查是否至少有一个项目有defaultDatasetId，表示至少一个webhook已经触发
+          const hasAnyWebhookData = data.items.some((item: Item) => 
+            item.defaultDatasetId !== null && item.defaultDatasetId !== undefined
+          );
+          
+          // 如果发现第一次webhook数据，记录时间
+          if (hasAnyWebhookData && firstWebhookTime === null) {
+            console.log('第一次检测到webhook数据，设置3分钟后检查');
+            setFirstWebhookTime(currentTime);
+          }
+          
+          // 如果已经过了第一次webhook后的3分钟，并且尚未执行完整检查
+          if (firstWebhookTime !== null && 
+              currentTime - firstWebhookTime >= 3 * 60 * 1000 && 
+              !checkCompleted) {
+            
+            console.log('执行3分钟后的完整数据检查');
+            // 执行完整检查
+            let needsUserAction = false;
+            const incomplete = [];
+            
+            for (const item of data.items) {
+              // 检查哪些项目需要用户介入
+              if (item.platform === 'youtube') {
+                // 确保只有无效数据才会被筛选出来
+                const followers = item.fans_count || item.followers;
+                if (!item.url || followers === undefined || followers === null || followers <= 200) {
+                  needsUserAction = true;
+                  incomplete.push(item);
+                }
+              } else {
+                // 其他平台的检查逻辑
+                const followers = item.followers;
+                if (!item.url || followers === undefined || followers === null || followers <= 200) {
+                  needsUserAction = true;
+                  incomplete.push(item);
+                }
+              }
+            }
+            
+            // 标记检查已完成
+            setCheckCompleted(true);
+            setScrapingPolling(false);
+            
+            if (needsUserAction) {
+              // 显示用户介入界面
+              setNeedUserAction(true);
+              setIncompleteItems(incomplete);
+            } else {
+              // 所有数据有效，继续下一步
+              handleGenerateEmailAfterScraping();
+            }
+          } else if (!checkCompleted) {
+            // 继续轮询直到3分钟后检查完成
+            setTimeout(() => setFirstWebhookTime(firstWebhookTime), 10000); // 10秒后再次检查
+          }
+        } catch (e: any) {
+          setErrorInfo(e.message);
+          setStep('error');
+        }
+      }, 10000); // 使用10秒的轮询间隔，仅为了检测第一次webhook
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [scrapingPolling, searchId, firstWebhookTime, checkCompleted]);
+
+  // 单个重试
   const handleRetry = async (item: Item, index: number) => {
     setRetryingIndices((prev) => [...prev, index])
     try {
-      // 如果searchId存在，保存到localStorage
-      if (searchId) {
-        localStorage.setItem('currentSearchId', searchId);
-      }
+      toast.success(`已提交请求，正在后台处理...`);
       
-      const retryRes = await fetch('/api/simple-mode/scrape-followers', {
+      // 使用异步API启动Apify任务
+      const retryRes = await fetch('/api/apify/youtube_async', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: [item], searchId }),
-      })
-      const retryJson = await retryRes.json()
+        body: JSON.stringify({ 
+          startUrls: [
+            { url: item.url, method: "GET" }
+          ],
+          id: item.id,
+          searchId
+        })
+      });
+      
+      if (!retryRes.ok) {
+        const errorText = await retryRes.text();
+        throw new Error(`启动任务失败: ${errorText}`);
+      }
+      
+      const resultData = await retryRes.json();
       setDebugResponses((prev) => [
         ...prev,
-        { step: `scrape-followers-retry (${item.platform})`, data: retryJson },
-      ])
-      const newItem: Item = retryJson.results[0]
-      setItems((prev) =>
-        prev.map((it) =>
-          it.platform === item.platform && it.name === item.name ? newItem : it
-        )
-      )
-      setIncompleteItems((prev) => {
-        const updated = prev.map((it, i) => (i === index ? newItem : it))
-        const filtered = updated.filter(
-          (it) =>
-            it.followers === undefined || it.followers === null || it.followers <= 200
-        )
-        if (filtered.length === 0) {
-          setNeedUserAction(false)
-          handleGenerateEmailAfterScraping()
+        { step: `youtube-retry-request (${item.platform})`, data: resultData },
+      ]);
+      
+      toast.success(`请求已提交，数据将在后台更新`);
+      
+      // 2分钟后自动检查数据库更新
+      setTimeout(async () => {
+        try {
+          // 查询数据库中的最新数据
+          const res = await fetch('/api/simple-mode/get-competitor-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchId })
+          });
+          
+          if (!res.ok) {
+            throw new Error('获取数据失败');
+          }
+          
+          const data = await res.json();
+          
+          // 查找当前项目的更新数据
+          const updatedItem = data.items.find((i: Item) => i.id === item.id);
+          
+          if (updatedItem && updatedItem.fans_count !== null && updatedItem.fans_count !== undefined) {
+            const isSuccess = updatedItem.fans_count > 200;
+            
+            // 更新本地状态
+            setItems(prevItems => prevItems.map(prevItem => 
+              prevItem.id === item.id 
+                ? { ...prevItem, followers: updatedItem.fans_count, fans_count: updatedItem.fans_count, success: isSuccess } 
+                : prevItem
+            ));
+            
+            // 更新incompleteItems状态 - 创建全新数组以确保重新渲染
+            setIncompleteItems(prev => {
+              const newArray = [...prev]; // 创建新数组
+              const itemIndex = newArray.findIndex(it => it.id === item.id);
+              if (itemIndex >= 0) {
+                // 替换为新对象
+                newArray[itemIndex] = { 
+                  ...newArray[itemIndex], 
+                  followers: updatedItem.fans_count, 
+                  fans_count: updatedItem.fans_count, 
+                  success: isSuccess
+                };
+              }
+              return newArray; // 返回新数组以触发重新渲染
+            });
+            
+            if (isSuccess) {
+              toast.success(`成功获取 ${item.name} 的关注者数: ${updatedItem.fans_count}`);
+            } else {
+              toast.error(`${item.name} 的关注者数 ${updatedItem.fans_count} 低于要求的阈值`);
+            }
+            
+            // 强制整个界面重新渲染
+            forceUpdate();
+          }
+          
+          // 无论更新是否成功，都移除重试状态
+          setRetryingIndices((prev) => prev.filter((i) => i !== index));
+          
+        } catch (err) {
+          console.error('检查更新失败:', err);
+          // 超时后也移除重试状态
+          setRetryingIndices((prev) => prev.filter((i) => i !== index));
         }
-        return updated
-      })
+      }, 120000); // 2分钟后检查
+      
     } catch (e: any) {
-      toast.error('Retry failed: ' + e.message)
-    } finally {
-      setRetryingIndices((prev) => prev.filter((i) => i !== index))
+      toast.error('重试请求失败: ' + e.message);
+      // 如果请求失败，恢复按钮状态
+      setRetryingIndices((prev) => prev.filter((i) => i !== index));
     }
   }
 
-  // Handle ignore-all: keep only valid items
+  // 忽略所有无效项
   const handleIgnoreAll = async () => {
     try {
-      // 如果searchId存在，保存到localStorage
-      if (searchId) {
-        localStorage.setItem('currentSearchId', searchId);
-      }
-      
+      // 只保留有效项
       const validItems = items.filter(
-        (item: Item) =>
-          item.followers !== undefined &&
-          item.followers !== null &&
-          item.followers >= 200
+        (item: Item) => item.followers !== undefined && item.followers !== null && item.followers >= 200
       )
       setItems(validItems)
       setNeedUserAction(false)
@@ -172,55 +318,25 @@ export default function SimpleModePage() {
     }
   }
 
-  // Generate email after successful scraping
+  // scraping 完成后生成邮件
   const handleGenerateEmailAfterScraping = async () => {
     try {
       setStep('generating')
-      
-      // 如果searchId为空，尝试从localStorage获取
-      let currentSearchId = searchId;
-      if (!currentSearchId) {
-        const storedSearchId = localStorage.getItem('currentSearchId');
-        if (storedSearchId) {
-          console.log('Restored searchId from localStorage:', storedSearchId);
-          setSearchId(storedSearchId);
-          currentSearchId = storedSearchId;
-        }
-      }
-      
-      console.log('Generating email, searchId:', currentSearchId);
-      if (!currentSearchId) {
-        console.error('Warning: searchId is empty!');
-        toast.error('Error: Search ID does not exist, cannot generate email');
-        setStep('error');
-        setErrorInfo('Search ID does not exist, cannot generate email');
-        return;
-      }
-      
       const emailRes = await fetch('/api/simple-mode/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          searchId: currentSearchId,
+          searchId,
           selectedTemplate: template,
           customTemplate: '',
           contactName,
         }),
       })
-      const emailJson = (await emailRes.json()) as { content: string, error?: string }
+      const emailJson = (await emailRes.json()) as { content: string }
       setDebugResponses((prev) => [
         ...prev,
         { step: 'generate-email', data: emailJson },
       ])
-      
-      if (emailJson.error) {
-        console.error('Email generation failed:', emailJson.error);
-        setErrorInfo(emailJson.error);
-        setStep('error');
-        toast.error('Error: ' + emailJson.error);
-        return;
-      }
-      
       setEmailContent(emailJson.content)
       setStep('done')
       toast.success('Email generated successfully!')
@@ -231,7 +347,7 @@ export default function SimpleModePage() {
     }
   }
 
-  // Main process
+  // 主流程
   const handleGenerateEmail = async () => {
     try {
       setStep('creating')
@@ -247,9 +363,6 @@ export default function SimpleModePage() {
       ])
       const id = createJson.searchId
       setSearchId(id)
-      
-      // 保存searchId到localStorage以便恢复
-      localStorage.setItem('currentSearchId', id);
 
       setStep('analysing')
       const compRes = await fetch('/api/simple-mode/analyse-competitors', {
@@ -266,14 +379,15 @@ export default function SimpleModePage() {
 
       setStep('extracting')
       const allPlatforms = ['instagram', 'linkedin', 'tiktok', 'twitter', 'youtube'] as const
-      const brandPlatforms: Item[] = allPlatforms.map((p) => ({ name: brandName, platform: p }))
+      const brandPlatforms: Item[] = allPlatforms.map((p) => ({ name: brandName, platform: p, id: '' }))
       const usePlatforms =
         platformSelection === 'all platform' ? allPlatforms : [platformSelection]
       const compItems: Item[] = compJson.competitors
         .slice(1)
-        .flatMap((name) => usePlatforms.map((p) => ({ name, platform: p })))
+        .flatMap((name) => usePlatforms.map((p) => ({ name, platform: p, id: '' })))
       const allItems: Item[] = [...brandPlatforms, ...compItems]
 
+      // 提取URL并写入数据库
       const itemsWithUrl: Item[] = []
       for (const it of allItems) {
         const urlRes = await fetch('/api/simple-mode/extract-url', {
@@ -281,58 +395,83 @@ export default function SimpleModePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
         })
-        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string }
+        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string; id: string }
         setDebugResponses((prev) => [
           ...prev,
           { step: `extract-url:${it.platform}`, data: urlJson },
         ])
-        itemsWithUrl.push({ ...it, url: urlJson.url })
+        itemsWithUrl.push({ ...it, url: urlJson.url, id: urlJson.id })
       }
       setItems(itemsWithUrl)
 
-      setStep('scraping')
-      const scrapeRes = await fetch('/api/simple-mode/scrape-followers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: itemsWithUrl, searchId: id }),
-      })
-      const scrapeJson = await scrapeRes.json()
-      setDebugResponses((prev) => [
-        ...prev,
-        { step: 'scrape-followers', data: scrapeJson },
-      ])
+      // 处理竞争对手数据
+      for (const item of itemsWithUrl) {
+        const updateRes = await fetch('/api/simple-mode/update-competitor', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            search_id: id, // 使用创建的 search_id
+            competitor_name: item.name, // 竞争对手名称
+            platform: item.platform, // 使用提取的实际平台
+            url: item.url, // 使用提取的实际 URL
+          }),
+        });
 
-      // 检查是否有无效或失败的任务，需要用户干预
-      if (scrapeJson.needUserAction) {
-        setNeedUserAction(true)
-        // 使用后端返回的incompleteItems，如果存在的话
-        if (scrapeJson.incompleteItems && scrapeJson.incompleteItems.length > 0) {
-          setIncompleteItems(scrapeJson.incompleteItems);
-        } else {
-          // 向后兼容：过滤出无效项
-          setIncompleteItems(
-            scrapeJson.results.filter(
-              (item: Item) =>
-                !item.success || 
-                item.followers === undefined ||
-                item.followers === null || 
-                item.followers <= 200
-            )
-          );
-        }
-        setItems(scrapeJson.results)
-        return
-      } else {
-        setItems(scrapeJson.results)
+        const updateJson = await updateRes.json();
+        setDebugResponses((prev) => [
+          ...prev,
+          { step: 'update-competitor', data: updateJson },
+        ]);
       }
 
-      handleGenerateEmailAfterScraping()
+      // scraping 步骤，调用API并开始轮询
+      setStep('scraping')
+      await fetch('/api/simple-mode/scrape-followers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchId: id }),
+      })
+      setScrapingPolling(true)
     } catch (err: any) {
       setErrorInfo(err.message)
       setStep('error')
       toast.error('Error: ' + err.message)
     }
   }
+
+  // 添加一个调试函数，用于手动触发Invalid Data显示
+  const debugShowInvalidData = async () => {
+    try {
+      // 获取真实数据
+      const res = await fetch('/api/simple-mode/get-competitor-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ searchId })
+      });
+      const data = await res.json();
+      
+      // 找出真正需要用户介入的项目
+      const incomplete = data.items.filter((item: Item) => {
+        if (item.platform === 'youtube') {
+          // 确保只有无效数据才会被筛选出来
+          const followers = item.fans_count || item.followers;
+          return !item.url || followers === undefined || followers === null || followers <= 200;
+        } else {
+          const followers = item.followers;
+          return !item.url || followers === undefined || followers === null || followers <= 200;
+        }
+      });
+      
+      setNeedUserAction(true);
+      setIncompleteItems(incomplete);
+      setScrapingPolling(false);
+      
+      toast.success(`找到 ${incomplete.length} 个无效数据项`);
+    } catch (e: any) {
+      console.error('Failed to load invalid data:', e);
+      toast.error('加载真实无效数据失败: ' + e.message);
+    }
+  };
 
   return (
     <div className="container" style={{ position: 'relative' }}>
@@ -352,6 +491,21 @@ export default function SimpleModePage() {
       {/* Theme toggle */}
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <ThemeToggle />
+        {/* 添加调试按钮 */}
+        <button 
+          onClick={debugShowInvalidData} 
+          style={{ 
+            marginLeft: 10, 
+            padding: '4px 8px', 
+            background: '#666', 
+            color: 'white', 
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer'
+          }}
+        >
+          显示真实无效数据
+        </button>
       </div>
 
       <h1>Simple Mode One-Click Operation</h1>
@@ -463,106 +617,66 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* When user action is required */}
+      {/* 用户介入：显示无效项和重试选项 */}
       {needUserAction && (
         <div className="card">
-          <h3>Invalid Data Detected - Action Required</h3>
+          <h3>Invalid Data Detected – Action Required</h3>
           <p>
             The following items have invalid data (followers are null or not greater than 200).
-            Please retry each link individually or ignore all invalid data:
+            Please choose to retry for each link individually or ignore all invalid data:
           </p>
           <ul style={{ listStyle: 'none', padding: 0 }}>
-            {incompleteItems.map((item, index) => (
-              <li
-                key={index}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  marginBottom: '8px'
-                }}
-              >
-                <span>
-                  Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
-                  {item.followers === null ? 'null' : item.followers}
-                </span>
-                {item.followers !== undefined &&
-                item.followers !== null &&
-                item.followers >= 200 ? (
-                  <span style={{ padding: '4px 8px', fontSize: '0.8rem' }}>✅</span>
-                ) : (
-                  <button
-                    onClick={() => handleRetry(item, index)}
-                    disabled={retryingIndices.includes(index)}
-                    style={{
-                      padding: '4px 8px',
-                      fontSize: '0.8rem',
-                      backgroundColor: retryingIndices.includes(index) ? '#ccc' : undefined
-                    }}
-                  >
-                    {retryingIndices.includes(index) ? 'Retrying...' : 'Retry'}
-                  </button>
-                )}
-              </li>
-            ))}
+            {incompleteItems.map((item, index) => {
+              // 确定是否显示成功标记
+              const hasValidFollowers = 
+                (item.followers !== undefined && item.followers !== null && item.followers > 200) ||
+                (item.fans_count !== undefined && item.fans_count !== null && item.fans_count > 200);
+              
+              return (
+                <li
+                  key={`${item.id}-${index}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '8px'
+                  }}
+                >
+                  <span>
+                    Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
+                    {item.followers === null ? 'null' : (item.fans_count || item.followers)}
+                  </span>
+                  {hasValidFollowers ? (
+                    <span style={{ padding: '4px 8px', fontSize: '0.8rem' }}>✅</span>
+                  ) : (
+                    <button
+                      onClick={() => handleRetry(item, index)}
+                      disabled={retryingIndices.includes(index)}
+                      style={{
+                        padding: '4px 8px',
+                        fontSize: '0.8rem',
+                        backgroundColor: retryingIndices.includes(index) ? '#ccc' : undefined
+                      }}
+                    >
+                      {retryingIndices.includes(index) ? 'Retrying...' : 'Retry'}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
           </ul>
           <button onClick={handleIgnoreAll} className="search-btn">
-            Ignore Invalid Data & Continue
+            Ignore Invalid Data & Next
           </button>
         </div>
       )}
 
-      {/* Display generated email */}
+      {/* 显示生成的邮件 */}
       {step === 'done' && (
         <div className="card">
           <h2>Generated Email</h2>
           <div style={{ background: '#f3f4f6', padding: 16, borderRadius: 4 }}>
             <ReactMarkdown>{emailContent}</ReactMarkdown>
-          </div>
-        </div>
-      )}
-
-      {/* Results Summary */}
-      {items.length > 0 && step !== 'idle' && (
-        <div className="card">
-          <h3>Scraping Results Summary</h3>
-          <div style={{
-            overflowX: 'auto',
-            fontFamily: 'monospace',
-            fontSize: '14px'
-          }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>Brand</th>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>Platform</th>
-                  <th style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #ddd' }}>URL</th>
-                  <th style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>Followers</th>
-                  <th style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid #ddd' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => (
-                  <tr key={index} style={{ backgroundColor: index % 2 === 0 ? '#f9f9f9' : 'white' }}>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>{item.name}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>{item.platform}</td>
-                    <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.url ? (
-                        <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ wordBreak: 'break-all', maxWidth: '300px', display: 'inline-block' }}>
-                          {item.url.substring(0, 40)}{item.url.length > 40 ? '...' : ''}
-                        </a>
-                      ) : 'N/A'}
-                    </td>
-                    <td style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.followers === undefined || item.followers === null ? 'N/A' : item.followers.toLocaleString()}
-                    </td>
-                    <td style={{ textAlign: 'center', padding: '8px', borderBottom: '1px solid #ddd' }}>
-                      {item.success ? '✅' : '❌'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
           </div>
         </div>
       )}
