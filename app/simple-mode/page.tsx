@@ -128,7 +128,7 @@ export default function SimpleModePage() {
           });
           
           if (!res.ok) {
-            throw new Error('检查爬取状态失败');
+            throw new Error('Failed to check scraping status');
           }
           
           const statusData = await res.json();
@@ -148,7 +148,7 @@ export default function SimpleModePage() {
             }
           } else {
             // 继续轮询 - 修复逻辑，使用更精确的计时
-            const waitingMsg = `仍在爬取中，等待10秒后继续检查...`
+            const waitingMsg = `Still scraping, waiting 10 seconds before continuing...`
             
             // 关键修复：先将polling设为false，然后用timeout后再设为true，确保useEffect被重新触发
             setScrapingPolling(false);
@@ -162,7 +162,7 @@ export default function SimpleModePage() {
             { step: 'check-scraping-status', data: statusData },
           ]);
         } catch (e: any) {
-          console.error('检查爬取状态错误:', e);
+          console.error('Failed to check scraping status:', e);
           // 出错时也应该重新开始轮询
           setScrapingPolling(false);
           setTimeout(() => {
@@ -188,7 +188,7 @@ export default function SimpleModePage() {
       });
       
       if (!res.ok) {
-        throw new Error('获取数据失败');
+        throw new Error('Failed to get data');
       }
       
       const data = await res.json();
@@ -213,7 +213,7 @@ export default function SimpleModePage() {
         handleGenerateEmailAfterScraping();
       }
     } catch (e: any) {
-      console.error('获取不完整项目失败:', e);
+      console.error('Failed to get incomplete items:', e);
       setErrorInfo(e.message);
       setStep('error');
     }
@@ -223,7 +223,7 @@ export default function SimpleModePage() {
   const handleRetry = async (item: Item, index: number) => {
     setRetryingIndices((prev) => [...prev, index])
     try {
-      toast.success(`已提交请求，正在处理...`);
+      toast.success(`Request submitted, processing...`);
       
       // 根据平台类型选择不同的API端点和请求参数
       let apiEndpoint = '';
@@ -270,7 +270,7 @@ export default function SimpleModePage() {
           startUrls: [item.url]
         };
       } else {
-        throw new Error(`平台 ${item.platform} 暂不支持重试操作`);
+        throw new Error(`Platform ${item.platform} does not support retry operation`);
       }
       
       // 发送请求
@@ -282,7 +282,7 @@ export default function SimpleModePage() {
       
       if (!retryRes.ok) {
         const errorText = await retryRes.text();
-        throw new Error(`请求失败: ${errorText}`);
+        throw new Error(`Request failed: ${errorText}`);
       }
       
       const resultData = await retryRes.json();
@@ -367,7 +367,7 @@ export default function SimpleModePage() {
           });
           
           if (!updateRes.ok) {
-            throw new Error('更新数据库失败');
+            throw new Error('Failed to update database');
           }
           
           // 更新前端状态
@@ -375,23 +375,23 @@ export default function SimpleModePage() {
           updateItemInState(item.id, fans_count, isSuccess);
           
           if (isSuccess) {
-            toast.success(`成功获取 ${item.name} 的关注者数: ${fans_count}`);
+            toast.success(`Successfully retrieved ${item.name}'s followers: ${fans_count}`);
           } else {
-            toast.error(`${item.name} 的关注者数 ${fans_count} 低于要求的阈值`);
+            toast.error(`${item.name}'s followers count ${fans_count} is below the required threshold`);
           }
         } else {
-          toast.error(`未能从结果中提取粉丝数量`);
+          toast.error(`Could not extract follower count from results`);
         }
       } catch (err) {
         console.error(`处理${item.platform}数据失败:`, err);
-        toast.error('处理数据失败: ' + (err instanceof Error ? err.message : String(err)));
+        toast.error('Failed to process data: ' + (err instanceof Error ? err.message : String(err)));
       }
       
       // 移除重试状态
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
       
     } catch (e: any) {
-      toast.error('重试请求失败: ' + e.message);
+      toast.error('Retry request failed: ' + e.message);
       // 如果请求失败，恢复按钮状态
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
     }
@@ -457,7 +457,7 @@ export default function SimpleModePage() {
     const value = e.target.value;
     setEditingUrl(value);
     if (!validateUrl(value)) {
-      setUrlError('请输入正确URL');
+      setUrlError('Please enter a valid URL');
     } else {
       setUrlError('');
     }
@@ -468,7 +468,7 @@ export default function SimpleModePage() {
     const value = e.target.value;
     setEditingFollowers(value);
     if (!validateFollowers(value)) {
-      setFollowersError('请输入大于200的正确数字');
+      setFollowersError('Please enter a number greater than 200');
     } else {
       setFollowersError('');
     }
@@ -507,7 +507,7 @@ export default function SimpleModePage() {
       });
       
       if (!updateRes.ok) {
-        throw new Error('更新数据库失败');
+        throw new Error('Failed to update database');
       }
       
       // 更新前端状态
@@ -521,9 +521,9 @@ export default function SimpleModePage() {
       setUrlError('');
       setFollowersError('');
       
-      toast.success(`成功更新 ${item.name} 的数据`);
+      toast.success(`Successfully updated ${item.name}'s data`);
     } catch (e: any) {
-      toast.error('保存失败: ' + e.message);
+      toast.error('Save failed: ' + e.message);
     }
   }
 
@@ -541,19 +541,19 @@ export default function SimpleModePage() {
       });
       
       if (!deleteRes.ok) {
-        throw new Error('从数据库删除失败');
+        throw new Error('Failed to delete from database');
       }
       
       // 从列表中移除
       setIncompleteItems(prev => prev.filter((_, i) => i !== index));
       setItems(prev => prev.filter(i => i.id !== item.id));
       
-      toast.success(`已删除 ${item.name} 的数据`);
+      toast.success(`Successfully deleted ${item.name}'s data`);
       
       // 退出编辑模式
       handleCancelEdit();
     } catch (e: any) {
-      toast.error('删除失败: ' + e.message);
+      toast.error('Delete failed: ' + e.message);
     }
   }
 
@@ -590,7 +590,7 @@ export default function SimpleModePage() {
       
       if (!emailRes.ok) {
         const errorText = await emailRes.text()
-        throw new Error(`生成邮件API错误 (${emailRes.status}): ${errorText}`)
+        throw new Error(`Email generation API error (${emailRes.status}): ${errorText}`)
       }
       
       const emailJson = (await emailRes.json()) as { content: string }
@@ -601,7 +601,7 @@ export default function SimpleModePage() {
       ])
       
       if (!emailJson.content) {
-        throw new Error('生成的邮件内容为空')
+        throw new Error('Generated email content is empty')
       }
       
       setEmailContent(emailJson.content)
@@ -1059,7 +1059,7 @@ export default function SimpleModePage() {
               cursor: editingIndex !== null ? 'not-allowed' : 'pointer'
             }}
           >
-            Ignore Invalid Data & Next
+            Ignore Invalid Data & Continue
           </button>
         </div>
       )}

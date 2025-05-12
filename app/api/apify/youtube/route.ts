@@ -25,9 +25,9 @@ export async function POST(req: NextRequest) {
   console.log('Optimized YouTube request:', JSON.stringify(optimizedInput));
   
   try {
-    // 设置更短的超时时间，避免长时间等待
+    // 设置更长的超时时间，避免长时间等待
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25秒超时
+    const timeoutId = setTimeout(() => controller.abort(), 59000); // 59秒超时
     
     const res = await fetch(
       `https://api.apify.com/v2/actor-tasks/ai.labs~youtube-channel-scraper-brand/run-sync-get-dataset-items?token=${apiKey}`,
