@@ -103,4 +103,46 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// 添加DELETE方法以支持删除功能
+export async function DELETE(request: NextRequest) {
+  try {
+    // 解析请求体
+    const { search_id, id } = await request.json();
+    
+    // 验证请求
+    if (!search_id || !id) {
+      return NextResponse.json(
+        { success: false, message: 'Missing required fields' },
+        { status: 400 }
+      );
+    }
+    
+    // 删除记录
+    const { error: deleteError } = await supabase
+      .from('simple_search_history')
+      .delete()
+      .eq('search_id', search_id)
+      .eq('id', id);
+    
+    if (deleteError) {
+      console.error('Error deleting data:', deleteError);
+      return NextResponse.json(
+        { success: false, message: 'Database delete failed', error: deleteError },
+        { status: 500 }
+      );
+    }
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Competitor data deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Error in delete-competitor:', error);
+    return NextResponse.json(
+      { success: false, message: 'Internal server error', error: error.message },
+      { status: 500 }
+    );
+  }
 } 

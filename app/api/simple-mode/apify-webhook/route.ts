@@ -9,18 +9,23 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Apify API Token
 const APIFY_API_TOKEN = process.env.APIFY_API_TOKEN || '';
 
+// 用于存储已处理的actorRunId，避免重复处理
+const processedRunIds = new Set<string>();
+
 export async function POST(request: NextRequest) {
   console.log('[apify-webhook] 开始处理 Apify Webhook 回调');
   
+  let webhookData;
+  let actorRunId;
+  
   try {
     // 解析请求体
-    const webhookData = await request.json();
+    webhookData = await request.json();
     console.log(`[apify-webhook] 收到 webhook 数据:`, JSON.stringify(webhookData));
     
     // 从标准 Apify webhook 格式中提取所需字段
     const eventType = webhookData.eventType;
-    const actorRunId = webhookData.eventData?.actorRunId || webhookData.resource?.id;
-    const defaultDatasetId = webhookData.resource?.defaultDatasetId;
+    actorRunId = webhookData.eventData?.actorRunId || webhookData.resource?.id;
     
     if (!eventType || !actorRunId) {
       console.error('[apify-webhook] 缺少 eventType 或 actorRunId');
@@ -39,6 +44,52 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, action: 'ignored' }, { status: 200 });
     }
     
+    // 检查是否已经处理过这个actorRunId
+    if (processedRunIds.has(actorRunId)) {
+      console.log(`[apify-webhook] 重复的actorRunId=${actorRunId}，跳过处理`);
+      return NextResponse.json({ 
+        success: true, 
+        message: `actorRunId=${actorRunId}已被处理，跳过`,
+        action: 'skipped_duplicate'
+      }, { status: 200 });
+    }
+    
+    // 添加到已处理集合
+    processedRunIds.add(actorRunId);
+    
+    // 异步处理数据，不阻塞响应
+    processWebhookDataAsync(webhookData, actorRunId);
+    
+    // 立即返回成功响应
+    return NextResponse.json({
+      success: true,
+      actorRunId,
+      message: '请求已接收，正在异步处理数据',
+      action: 'async_processing'
+    }, { status: 200 });
+    
+  } catch (error: any) {
+    console.error('[apify-webhook] 处理webhook出错:', error);
+    return NextResponse.json(
+      { success: false, message: '内部服务器错误', error: error.message },
+      { status: 200 } // 返回200状态码
+    );
+  }
+}
+
+// 异步处理webhook数据的函数
+async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
+  try {
+    console.log(`[apify-webhook] 异步处理 webhook 数据: ${JSON.stringify(webhookData)}`);
+    console.log(`[apify-webhook] 事件类型: ${webhookData.eventType}, 运行ID: ${actorRunId}`);
+    
+    const defaultDatasetId = webhookData.resource?.defaultDatasetId;
+    
+    if (!defaultDatasetId) {
+      console.error('[apify-webhook] webhook数据中找不到defaultDatasetId');
+      return;
+    }
+    
     // 查找具有该 actorRunId 的记录
     console.log(`[apify-webhook] 通过 actorRunId=${actorRunId} 查找数据库记录`);
     
@@ -52,19 +103,12 @@ export async function POST(request: NextRequest) {
     
     if (findError) {
       console.error('[apify-webhook] 查找记录失败:', findError);
-      return NextResponse.json({ 
-        success: false, 
-        message: '查找记录失败', 
-        error: findError 
-      }, { status: 200 }); // 返回200状态码
+      return;
     }
     
     if (!recordData) {
       console.log(`[apify-webhook] 未找到 actorRunId=${actorRunId} 的记录`);
-      return NextResponse.json({ 
-        success: false, 
-        message: `未找到 actorRunId=${actorRunId} 的记录`, 
-      }, { status: 200 }); // 返回200状态码
+      return;
     }
     
     record = recordData;
@@ -75,19 +119,7 @@ export async function POST(request: NextRequest) {
     // 检查是否已有完整数据
     if (record.defaultDatasetId && record.fans_count && record.dataset) {
       console.log(`[apify-webhook] 记录已有完整数据: defaultDatasetId=${record.defaultDatasetId}, fans_count=${record.fans_count}，跳过处理`);
-      return NextResponse.json({ 
-        success: true, 
-        action: 'already_processed',
-        fans_count: record.fans_count
-      }, { status: 200 });
-    }
-    
-    if (!defaultDatasetId) {
-      console.error('[apify-webhook] webhook数据中找不到defaultDatasetId');
-      return NextResponse.json({ 
-        success: false, 
-        message: 'webhook数据中找不到defaultDatasetId'
-      }, { status: 200 }); // 返回200状态码
+      return;
     }
     
     console.log(`[apify-webhook] 数据集ID: ${defaultDatasetId}`);
@@ -250,41 +282,19 @@ export async function POST(request: NextRequest) {
         
       if (updateError) {
         console.error('[apify-webhook] 更新数据库失败:', updateError);
-        return NextResponse.json({ 
-          success: false, 
-          message: '更新数据库失败', 
-          error: updateError 
-        }, { status: 200 }); // 返回200状态码
+        return;
       }
       
       console.log(`[apify-webhook] 成功更新数据库记录`);
       
     } catch (error: any) {
       console.error('[apify-webhook] 处理数据集出错:', error);
-      return NextResponse.json({
-        success: false,
-        message: '处理数据集出错',
-        error: error.message
-      }, { status: 200 }); // 返回200状态码
     }
     
-    // 返回成功结果
+    // 输出成功处理的信息
     console.log(`[apify-webhook] 成功处理webhook: platform=${platform}, fans_count=${fans_count}, 数据项数量=${items.length}`);
-    return NextResponse.json({
-      success: true,
-      platform,
-      fans_count,
-      datasetId: defaultDatasetId,
-      recordId: id,
-      itemCount: items.length,
-      action: 'updated'
-    }, { status: 200 });
     
   } catch (error: any) {
-    console.error('[apify-webhook] 处理webhook出错:', error);
-    return NextResponse.json(
-      { success: false, message: '内部服务器错误', error: error.message },
-      { status: 200 } // 返回200状态码
-    );
+    console.error('[apify-webhook] 异步处理webhook出错:', error);
   }
 } 

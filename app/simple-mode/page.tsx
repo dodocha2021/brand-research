@@ -73,23 +73,19 @@ export default function SimpleModePage() {
   // 用户介入相关
   const [incompleteItems, setIncompleteItems] = useState<Item[]>([])
   const [retryingIndices, setRetryingIndices] = useState<number[]>([])
+  // 添加编辑相关状态
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editingUrl, setEditingUrl] = useState<string>('')
+  const [editingFollowers, setEditingFollowers] = useState<string>('')
+  const [urlError, setUrlError] = useState<string>('')
+  const [followersError, setFollowersError] = useState<string>('')
 
   // scraping 轮询相关
   const [scrapingPolling, setScrapingPolling] = useState<boolean>(false)
   const [scrapingStatus, setScrapingStatus] = useState<string>('scraping')
 
-  // 添加更详细的状态跟踪
-  const [detailedStatus, setDetailedStatus] = useState<string>('')
-  const [progressLogs, setProgressLogs] = useState<string[]>([])
-
   const timerRef = useRef<number | null>(null)
   const debugContainerRef = useRef<HTMLDivElement>(null)
-
-  const addProgressLog = useCallback((log: string) => {
-    console.log(`[进度日志] ${log}`)
-    setProgressLogs(prev => [...prev, `${new Date().toLocaleTimeString()}: ${log}`])
-    setDetailedStatus(log)
-  }, [])
 
   useEffect(() => {
     const target = statusPercent[step]
@@ -122,12 +118,8 @@ export default function SimpleModePage() {
     
     if (scrapingPolling && searchId) {
       // 定期检查scraping状态
-      addProgressLog('开始轮询检查爬取状态...')
-      
       timeoutId = setTimeout(async () => {
         try {
-          addProgressLog('向API发送状态检查请求...')
-          
           // 调用新的接口检查状态
           const res = await fetch('/api/simple-mode/check-scraping-status', {
             method: 'POST',
@@ -140,46 +132,27 @@ export default function SimpleModePage() {
           }
           
           const statusData = await res.json();
-          addProgressLog(`收到状态响应: ${statusData.status}, 完成: ${statusData.isCompleted}`)
-          
-          // 显示详细诊断信息
-          if (statusData.diagnosis) {
-            addProgressLog(`诊断: ${statusData.diagnosis}`)
-          }
-          
-          // 详细的数据统计
-          if (statusData.stats) {
-            const stats = statusData.stats;
-            addProgressLog(`数据统计: 总计=${stats.total}, 有数据=${stats.withData}, 有效数据=${stats.withValidData}${
-              stats.lastUpdateTimeDiff !== null ? `, 最后更新: ${stats.lastUpdateTimeDiff}秒前` : ''
-            }`)
-          }
           
           // 根据返回状态进行处理
           if (statusData.isCompleted) {
-            addProgressLog(`爬取完成，状态: ${statusData.status}`)
             setScrapingPolling(false);
             setScrapingStatus(statusData.status);
             
             // 根据状态决定下一步操作
             if (statusData.status === 'user_action_needed') {
               // 需要用户处理，获取有问题的数据项
-              addProgressLog('需要用户处理无效数据，正在获取问题项...')
-              await fetchAndShowIncompleteItems();
+              fetchAndShowIncompleteItems();
             } else if (statusData.status === 'ready_for_generating') {
               // 可以直接生成邮件
-              addProgressLog('所有数据有效，开始生成邮件...')
               handleGenerateEmailAfterScraping();
             }
           } else {
             // 继续轮询 - 修复逻辑，使用更精确的计时
             const waitingMsg = `仍在爬取中，等待10秒后继续检查...`
-            addProgressLog(waitingMsg);
             
             // 关键修复：先将polling设为false，然后用timeout后再设为true，确保useEffect被重新触发
             setScrapingPolling(false);
             setTimeout(() => {
-              addProgressLog('重新开始轮询检查...');
               setScrapingPolling(true);
             }, 10000);
           }
@@ -190,11 +163,9 @@ export default function SimpleModePage() {
           ]);
         } catch (e: any) {
           console.error('检查爬取状态错误:', e);
-          addProgressLog(`检查状态出错: ${e.message}，10秒后重试`)
           // 出错时也应该重新开始轮询
           setScrapingPolling(false);
           setTimeout(() => {
-            addProgressLog('重新开始轮询检查...');
             setScrapingPolling(true);
           }, 10000);
         }
@@ -204,13 +175,11 @@ export default function SimpleModePage() {
     return () => {
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [scrapingPolling, searchId, addProgressLog]);
+  }, [scrapingPolling, searchId]);
   
   // 获取并显示不完整的项目
   const fetchAndShowIncompleteItems = async () => {
     try {
-      addProgressLog('正在获取竞争对手数据...')
-      
       // 获取当前数据
       const res = await fetch('/api/simple-mode/get-competitor-data', {
         method: 'POST',
@@ -223,7 +192,6 @@ export default function SimpleModePage() {
       }
       
       const data = await res.json();
-      addProgressLog(`成功获取${data.items.length}条竞争对手数据`)
       
       // 找出无效数据项
       const incomplete = data.items.filter((item: Item) => {
@@ -237,19 +205,15 @@ export default function SimpleModePage() {
         }
       });
       
-      addProgressLog(`找到${incomplete.length}条无效数据需要处理`)
-      
       // 如果有无效项，显示界面让用户处理
       if (incomplete.length > 0) {
         setIncompleteItems(incomplete);
       } else {
         // 如果实际上没有无效项，可以继续生成邮件
-        addProgressLog('实际上没有无效数据，继续生成邮件...')
         handleGenerateEmailAfterScraping();
       }
     } catch (e: any) {
       console.error('获取不完整项目失败:', e);
-      addProgressLog(`获取无效数据出错: ${e.message}`)
       setErrorInfo(e.message);
       setStep('error');
     }
@@ -462,10 +426,140 @@ export default function SimpleModePage() {
     forceUpdate();
   }
 
+  // 验证URL格式
+  const validateUrl = (url: string): boolean => {
+    try {
+      // 简单验证URL格式
+      const urlPattern = /^(https?:\/\/)?(www\.)?[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+(\/[a-zA-Z0-9-._~:/?#[\]@!$&'()*+,;=]*)?$/;
+      return urlPattern.test(url);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // 验证粉丝数
+  const validateFollowers = (followers: string): boolean => {
+    const followerNum = Number(followers);
+    return !isNaN(followerNum) && followerNum > 200;
+  }
+
+  // 处理编辑按钮点击
+  const handleEdit = (item: Item, index: number) => {
+    setEditingIndex(index);
+    setEditingUrl(item.url || '');
+    setEditingFollowers(item.followers?.toString() || '');
+    setUrlError('');
+    setFollowersError('');
+  }
+
+  // 处理URL输入变化
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditingUrl(value);
+    if (!validateUrl(value)) {
+      setUrlError('请输入正确URL');
+    } else {
+      setUrlError('');
+    }
+  }
+
+  // 处理粉丝数输入变化
+  const handleFollowersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEditingFollowers(value);
+    if (!validateFollowers(value)) {
+      setFollowersError('请输入大于200的正确数字');
+    } else {
+      setFollowersError('');
+    }
+  }
+
+  // 处理取消编辑
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditingUrl('');
+    setEditingFollowers('');
+    setUrlError('');
+    setFollowersError('');
+  }
+
+  // 处理保存编辑
+  const handleSaveEdit = async (item: Item) => {
+    try {
+      // 最终验证
+      if (!validateUrl(editingUrl) || !validateFollowers(editingFollowers)) {
+        return; // 验证失败，不执行保存
+      }
+
+      const fans_count = Number(editingFollowers);
+      
+      // 更新数据库
+      const updateRes = await fetch('/api/simple-mode/update-competitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: searchId,
+          competitor_name: item.name,
+          platform: item.platform,
+          url: editingUrl,
+          fans_count: fans_count
+        }),
+      });
+      
+      if (!updateRes.ok) {
+        throw new Error('更新数据库失败');
+      }
+      
+      // 更新前端状态
+      const isSuccess = fans_count > 200;
+      updateItemInState(item.id, fans_count, isSuccess);
+      
+      // 退出编辑模式
+      setEditingIndex(null);
+      setEditingUrl('');
+      setEditingFollowers('');
+      setUrlError('');
+      setFollowersError('');
+      
+      toast.success(`成功更新 ${item.name} 的数据`);
+    } catch (e: any) {
+      toast.error('保存失败: ' + e.message);
+    }
+  }
+
+  // 处理删除项目
+  const handleDeleteItem = async (item: Item, index: number) => {
+    try {
+      // 从数据库删除
+      const deleteRes = await fetch('/api/simple-mode/update-competitor', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search_id: searchId,
+          id: item.id
+        }),
+      });
+      
+      if (!deleteRes.ok) {
+        throw new Error('从数据库删除失败');
+      }
+      
+      // 从列表中移除
+      setIncompleteItems(prev => prev.filter((_, i) => i !== index));
+      setItems(prev => prev.filter(i => i.id !== item.id));
+      
+      toast.success(`已删除 ${item.name} 的数据`);
+      
+      // 退出编辑模式
+      handleCancelEdit();
+    } catch (e: any) {
+      toast.error('删除失败: ' + e.message);
+    }
+  }
+
   // 修改handleIgnoreAll函数
   const handleIgnoreAll = async () => {
     try {
-      addProgressLog('忽略所有无效数据，继续处理...')
       // 只保留有效项
       const validItems = items.filter(
         (item: Item) => item.followers !== undefined && item.followers !== null && item.followers >= 200
@@ -474,7 +568,6 @@ export default function SimpleModePage() {
       setIncompleteItems([]); // 清空不完整项列表
       handleGenerateEmailAfterScraping();
     } catch (e: any) {
-      addProgressLog(`忽略操作失败: ${e.message}`)
       toast.error('Ignore failed: ' + e.message);
     }
   };
@@ -482,10 +575,8 @@ export default function SimpleModePage() {
   // scraping 完成后生成邮件
   const handleGenerateEmailAfterScraping = async () => {
     try {
-      addProgressLog('开始生成邮件...')
       setStep('generating')
       
-      addProgressLog(`调用generate-email API，searchId=${searchId}`)
       const emailRes = await fetch('/api/simple-mode/generate-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -502,7 +593,6 @@ export default function SimpleModePage() {
         throw new Error(`生成邮件API错误 (${emailRes.status}): ${errorText}`)
       }
       
-      addProgressLog('收到邮件生成响应，处理内容...')
       const emailJson = (await emailRes.json()) as { content: string }
       
       setDebugResponses((prev) => [
@@ -514,13 +604,10 @@ export default function SimpleModePage() {
         throw new Error('生成的邮件内容为空')
       }
       
-      addProgressLog(`邮件生成成功，内容长度: ${emailJson.content.length}字符`)
       setEmailContent(emailJson.content)
       setStep('done')
-      addProgressLog('流程全部完成')
       toast.success('Email generated successfully!')
     } catch (err: any) {
-      addProgressLog(`生成邮件失败: ${err.message}`)
       setErrorInfo(err.message)
       setStep('error')
       toast.error('Error: ' + err.message)
@@ -576,10 +663,6 @@ export default function SimpleModePage() {
           body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
         })
         const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string; id: string }
-        setDebugResponses((prev) => [
-          ...prev,
-          { step: `extract-url:${it.platform}`, data: urlJson },
-        ])
         itemsWithUrl.push({ ...it, url: urlJson.url, id: urlJson.id })
       }
       setItems(itemsWithUrl)
@@ -621,6 +704,48 @@ export default function SimpleModePage() {
 
   return (
     <div className="container" style={{ position: 'relative' }}>
+      {/* 添加全局样式 */}
+      <style jsx global>{`
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+            transform: translateY(-5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        
+        .edit-input {
+          width: 100%;
+          padding: 6px 10px;
+          border-radius: 4px;
+          transition: all 0.3s ease;
+          font-size: 14px;
+        }
+        
+        .edit-input:focus {
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+        
+        .error-tooltip {
+          color: white;
+          font-size: 12px;
+          background-color: rgba(220, 38, 38, 0.9);
+          padding: 4px 10px;
+          border-radius: 4px;
+          position: absolute;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+          z-index: 10;
+          animation: fadeIn 0.3s ease-in-out;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+      `}</style>
+      
       {/* Version number */}
       <div
         style={{
@@ -731,46 +856,8 @@ export default function SimpleModePage() {
             </div>
             <p style={{ marginTop: 8, fontWeight: 600 }}>
               {progress}% – {step.charAt(0).toUpperCase() + step.slice(1)}
-              {detailedStatus && <span style={{ fontWeight: 'normal', marginLeft: 8, color: '#666' }}>
-                ({detailedStatus})
-              </span>}
             </p>
           </div>
-
-          {/* 添加详细状态日志显示 */}
-          {(step === 'scraping' || step === 'generating') && progressLogs.length > 0 && (
-            <div style={{ marginBottom: 16 }}>
-              <details open>
-                <summary 
-                  style={{ 
-                    cursor: 'pointer',
-                    fontWeight: 600,
-                    marginBottom: 8,
-                    color: '#3b82f6'
-                  }}
-                >
-                  进度详情日志 ({progressLogs.length})
-                </summary>
-                <div 
-                  style={{ 
-                    background: '#f3f4f6',
-                    padding: 12,
-                    borderRadius: 4,
-                    maxHeight: 200,
-                    overflowY: 'auto',
-                    fontSize: 13,
-                    fontFamily: 'monospace'
-                  }}
-                >
-                  {progressLogs.map((log, index) => (
-                    <div key={index} style={{ marginBottom: 4 }}>
-                      {log}
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </div>
-          )}
 
           {/* Analysis results */}
           {step === 'analysing' && (
@@ -801,6 +888,12 @@ export default function SimpleModePage() {
                 (item.followers !== undefined && item.followers !== null && item.followers > 200) ||
                 (item.fans_count !== undefined && item.fans_count !== null && item.fans_count > 200);
               
+              // 检查是否正在编辑该项
+              const isEditing = editingIndex === index;
+              
+              // 计算Save按钮是否可用
+              const saveEnabled = !urlError && !followersError && editingUrl && editingFollowers;
+              
               return (
                 <li
                   key={`${item.id}-${index}`}
@@ -808,33 +901,164 @@ export default function SimpleModePage() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    marginBottom: '8px'
+                    marginBottom: '16px',
+                    flexDirection: 'column'
                   }}
                 >
-                  <span>
-                    Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
-                    {item.followers === null ? 'null' : (item.fans_count || item.followers)}
-                  </span>
-                  {hasValidFollowers ? (
-                    <span style={{ padding: '4px 8px', fontSize: '0.8rem' }}>✅</span>
-                  ) : (
-                    <button
-                      onClick={() => handleRetry(item, index)}
-                      disabled={retryingIndices.includes(index)}
-                      style={{
-                        padding: '4px 8px',
-                        fontSize: '0.8rem',
-                        backgroundColor: retryingIndices.includes(index) ? '#ccc' : undefined
-                      }}
-                    >
-                      {retryingIndices.includes(index) ? 'Retrying...' : 'Retry'}
-                    </button>
-                  )}
+                  <div style={{ 
+                    display: 'flex', 
+                    width: '100%', 
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: isEditing ? '8px' : '0'
+                  }}>
+                    {!isEditing ? (
+                      <span>
+                        Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
+                        {item.followers === null ? 'null' : (item.fans_count || item.followers)}
+                      </span>
+                    ) : (
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        width: '80%',
+                        gap: '8px'
+                      }}>
+                        <div>Brand: {item.name} | Platform: {item.platform}</div>
+                        <div style={{ position: 'relative', marginBottom: '30px' }}>
+                          <div>Link:</div>
+                          <input
+                            type="text"
+                            value={editingUrl}
+                            onChange={handleUrlChange}
+                            style={{ 
+                              width: '100%', 
+                              padding: '4px 8px',
+                              border: urlError ? '1px solid red' : '1px solid #ccc'
+                            }}
+                            placeholder="Enter URL"
+                          />
+                          {urlError && (
+                            <div style={{ 
+                              color: 'white', 
+                              fontSize: '12px',
+                              backgroundColor: 'rgba(220, 38, 38, 0.9)',
+                              padding: '4px 10px',
+                              borderRadius: '3px',
+                              position: 'absolute',
+                              top: '27px',
+                              right: '0',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                              zIndex: 10,
+                              animation: 'fadeIn 0.2s ease-in-out',
+                              display: 'flex',
+                              alignItems: 'center',
+                              minHeight: '24px'
+                            }}>
+                              <span style={{ marginRight: '4px' }}>⚠️</span> {urlError}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ position: 'relative', marginBottom: '30px' }}>
+                          <div>Followers:</div>
+                          <input
+                            type="text"
+                            value={editingFollowers}
+                            onChange={handleFollowersChange}
+                            style={{ 
+                              width: '100%', 
+                              padding: '4px 8px',
+                              border: followersError ? '1px solid red' : '1px solid #ccc'
+                            }}
+                            placeholder="Enter follower count"
+                          />
+                          {followersError && (
+                            <div style={{ 
+                              color: 'white', 
+                              fontSize: '12px',
+                              backgroundColor: 'rgba(220, 38, 38, 0.9)',
+                              padding: '4px 10px',
+                              borderRadius: '3px',
+                              position: 'absolute',
+                              top: '27px',
+                              right: '0',
+                              boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                              zIndex: 10,
+                              animation: 'fadeIn 0.2s ease-in-out',
+                              display: 'flex',
+                              alignItems: 'center',
+                              minHeight: '24px'
+                            }}>
+                              <span style={{ marginRight: '4px' }}>⚠️</span> {followersError}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {!isEditing ? (
+                        <>
+                          {hasValidFollowers ? (
+                            <span style={{ padding: '4px 8px', fontSize: '0.8rem' }}>✅</span>
+                          ) : (
+                            <button
+                              onClick={() => handleRetry(item, index)}
+                              disabled={retryingIndices.includes(index)}
+                              className={`edit-btn btn-retry`}
+                              style={{
+                                padding: '4px 8px',
+                                fontSize: '0.8rem',
+                                backgroundColor: retryingIndices.includes(index) ? '#ccc' : undefined
+                              }}
+                            >
+                              {retryingIndices.includes(index) ? 'Retrying...' : 'Retry'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleEdit(item, index)}
+                            className="edit-btn btn-edit"
+                          >
+                            Edit
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleCancelEdit}
+                            className="edit-btn btn-cancel"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => handleSaveEdit(item)}
+                            disabled={!saveEnabled}
+                            className="edit-btn btn-save"
+                          >
+                            Save
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item, index)}
+                            className="edit-btn btn-delete"
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </li>
               );
             })}
           </ul>
-          <button onClick={handleIgnoreAll} className="search-btn">
+          <button 
+            onClick={handleIgnoreAll} 
+            className="search-btn"
+            disabled={editingIndex !== null}
+            style={{
+              opacity: editingIndex !== null ? 0.5 : 1,
+              cursor: editingIndex !== null ? 'not-allowed' : 'pointer'
+            }}
+          >
             Ignore Invalid Data & Next
           </button>
         </div>
