@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
         try {
           // 构建 YouTube Apify 请求体
           const apifyRequest = {
-            maxResultStreams: 1,
+            maxResultStreams: 0,
             maxResults: 1,
             maxResultsShorts: 1,
             sortVideosBy: "POPULAR",

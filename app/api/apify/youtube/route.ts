@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   
   // 简化的输入参数，只提取关键必要信息
   const optimizedInput = {
-    maxResultStreams: 1,      // 不需要直播
+    maxResultStreams: 0,      // 不需要直播
     maxResults: 1,            // 只需要1个视频结果
     maxResultsShorts: 1,      // 不需要短视频
     includeAboutInfo: true,   // 确保包含关于页面信息(包含订阅者数)
@@ -53,6 +53,15 @@ export async function POST(req: NextRequest) {
           channelUrl: data[0].channelUrl,
           numberOfSubscribers: data[0].aboutChannelInfo?.numberOfSubscribers || null
         };
+        
+        console.log(`YouTube API response for ${input.startUrls[0].url}:`, 
+          JSON.stringify({
+            status: res.status,
+            success: res.ok,
+            hasSubscribers: !!data[0].aboutChannelInfo?.numberOfSubscribers,
+            subscribersCount: data[0].aboutChannelInfo?.numberOfSubscribers || 'null'
+          })
+        );
         
         return NextResponse.json(channelInfo, { status: res.status })
       }

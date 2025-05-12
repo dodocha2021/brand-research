@@ -139,7 +139,11 @@ export default function CompetitorScrapePage() {
               })
             })
             const result = await res.json()
-            const info = Array.isArray(result) ? result[0] : null
+            console.log('YouTube API 前端响应:', JSON.stringify(result))
+            
+            const info = Array.isArray(result) ? result[0] : result
+            console.log('处理后的info对象:', JSON.stringify(info))
+            
             return {
               ...row,
               logo: info?.aboutChannelInfo?.channelAvatarUrl || '',
@@ -264,13 +268,22 @@ export default function CompetitorScrapePage() {
           })
         })
         const result = await res.json()
-        const info = Array.isArray(result) ? result[0] : null
+        console.log('YouTube API 前端响应:', JSON.stringify(result))
+        
+        const info = Array.isArray(result) ? result[0] : result
+        console.log('处理后的info对象:', JSON.stringify(info))
+        
         updatedRow.logo = info?.aboutChannelInfo?.channelAvatarUrl || ''
         updatedRow.followers = info?.aboutChannelInfo?.numberOfSubscribers ?? ''
+        
+        // 记录更新后的数据
+        console.log('更新后的followers值:', updatedRow.followers)
       }
       // 更新本地rows
+      console.log('即将更新本地rows, 更新的行:', JSON.stringify(updatedRow))
       setRows(prevRows => prevRows.map((r, i) => (i === idx ? { ...r, logo: updatedRow.logo, followers: updatedRow.followers } : r)))
       // 同步到 supabase
+      console.log('即将同步到supabase, id:', row.id, '数据:', JSON.stringify({logo: updatedRow.logo, followers: updatedRow.followers}))
       await supabase
         .from('competitor_search_history')
         .update({
