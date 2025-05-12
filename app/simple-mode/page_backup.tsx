@@ -22,7 +22,7 @@ type Item = {
   followers?: number | null
 }
 
-// 每个步骤对应的目标百分比
+// Each step's target percentage
 const statusPercent: Record<Step, number> = {
   idle: 0,
   creating: 10,
@@ -35,7 +35,7 @@ const statusPercent: Record<Step, number> = {
 }
 
 export default function SimpleModePage() {
-  // 版本号
+  // Version number
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
   useEffect(() => {
     fetch(
@@ -63,10 +63,10 @@ export default function SimpleModePage() {
   const [emailContent, setEmailContent] = useState<string>('')
   const [debugResponses, setDebugResponses] = useState<{ step: string; data: any }[]>([])
 
-  // 定时器引用，用于平滑进度
+  // Timer reference for smooth progress
   const timerRef = useRef<number | null>(null)
 
-  // 当步骤变更时，平滑推进进度条
+  // When step changes, smoothly advance the progress bar
   useEffect(() => {
     const target = statusPercent[step]
     if (timerRef.current !== null) clearInterval(timerRef.current)
@@ -177,7 +177,7 @@ export default function SimpleModePage() {
 
   return (
     <div className="container" style={{ position: 'relative' }}>
-      {/* 版本号 */}
+      {/* Version number */}
       <div
         style={{
           position: 'fixed',
@@ -190,7 +190,7 @@ export default function SimpleModePage() {
         {githubVersion ? `Version: ${githubVersion}` : 'Version: loading...'}
       </div>
 
-      {/* 主题切换 */}
+      {/* Theme toggle */}
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <ThemeToggle />
       </div>
@@ -199,7 +199,7 @@ export default function SimpleModePage() {
 
       {step === 'idle' && (
         <div className="card">
-          {/* 输入表单 */}
+          {/* Input form */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 4 }}>Target Brand Name:</label>
             <input
@@ -266,7 +266,7 @@ export default function SimpleModePage() {
 
       {step !== 'idle' && (
         <div className="card">
-          {/* 进度条 */}
+          {/* Progress bar */}
           <div style={{ marginBottom: 16 }}>
             <div
               style={{
@@ -290,7 +290,7 @@ export default function SimpleModePage() {
             </p>
           </div>
 
-          {/* 分析结果 */}
+          {/* Analysis results */}
           {step === 'analysing' && (
             <ul>
               {competitors.map((c, i) => (
@@ -299,12 +299,12 @@ export default function SimpleModePage() {
             </ul>
           )}
 
-          {/* 错误 */}
+          {/* Error */}
           {step === 'error' && <p style={{ color: 'red' }}>Error: {errorInfo}</p>}
         </div>
       )}
 
-      {/* 完成后展示邮件 */}
+      {/* Completed email display */}
       {step === 'done' && (
         <div className="card">
           <h2>Generated Email</h2>
@@ -314,7 +314,7 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* 调试信息 */}
+      {/* Debug information */}
       <div className="card">
         <h3>Debug Responses</h3>
         {debugResponses.map((dbg, idx) => (

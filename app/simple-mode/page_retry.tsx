@@ -40,7 +40,7 @@ type ScrapeFollowersResponse = {
   }
 }
 
-// 每个步骤对应的目标百分比
+// Target percentage for each step
 const statusPercent: Record<Step, number> = {
   idle: 0,
   creating: 10,
@@ -53,7 +53,7 @@ const statusPercent: Record<Step, number> = {
 }
 
 export default function SimpleModePage() {
-  // 版本号
+  // Version number
   const [githubVersion, setGithubVersion] = useState<string | null>(null)
   const [terminalLogs, setTerminalLogs] = useState<string[]>([])
   const logWindowRef = useRef<HTMLDivElement>(null)
@@ -67,7 +67,7 @@ export default function SimpleModePage() {
       .catch(() => setGithubVersion(null))
   }, [])
 
-  // 自动滚动日志窗口到底部
+  // Auto-scroll log window to bottom
   useEffect(() => {
     if (logWindowRef.current) {
       logWindowRef.current.scrollTop = logWindowRef.current.scrollHeight
@@ -91,10 +91,10 @@ export default function SimpleModePage() {
   const [emailContent, setEmailContent] = useState<string>('')
   const [debugResponses, setDebugResponses] = useState<{ step: string; data: any }[]>([])
 
-  // 定时器引用，用于平滑进度
+  // Timer reference for smooth progress
   const timerRef = useRef<number | null>(null)
 
-  // 当步骤变更时，平滑推进进度条
+  // When step changes, smoothly advance the progress bar
   useEffect(() => {
     const target = statusPercent[step]
     if (timerRef.current !== null) clearInterval(timerRef.current)
@@ -116,7 +116,7 @@ export default function SimpleModePage() {
 
   const handleGenerateEmail = async () => {
     try {
-      setTerminalLogs([]) // 清空之前的日志
+      setTerminalLogs([]) // Clear previous logs
 
       // 1. Create search session
       setStep('creating')
@@ -202,7 +202,7 @@ export default function SimpleModePage() {
       setStep('scraping')
       setTerminalLogs(prev => [...prev, 'Starting to scrape followers data...'])
 
-      // 添加所有要抓取的 URL 信息
+      // Add all URLs to be scraped
       itemsWithUrl.forEach(item => {
         setTerminalLogs(prev => [...prev, `Fetching ${item.platform} data for URL: ${item.url}`])
       })
@@ -221,7 +221,7 @@ export default function SimpleModePage() {
       const scrapeJson = await scrapeRes.json() as ScrapeFollowersResponse
       setDebugResponses(prev => [...prev, { step: 'scrape-followers', data: scrapeJson }])
 
-      // 添加每个平台的抓取结果
+      // Add each platform scraping result
       scrapeJson.results.forEach(result => {
         const statusMessage = result.success 
           ? `Successfully scraped ${result.platform} for ${result.name}: ${result.followers} followers`
@@ -278,7 +278,7 @@ export default function SimpleModePage() {
 
   return (
     <div className="container" style={{ position: 'relative' }}>
-      {/* 版本号 */}
+      {/* Version number */}
       <div
         style={{
           position: 'fixed',
@@ -291,7 +291,7 @@ export default function SimpleModePage() {
         {githubVersion ? `Version: ${githubVersion}` : 'Version: loading...'}
       </div>
 
-      {/* 主题切换 */}
+      {/* Theme toggle */}
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <ThemeToggle />
       </div>
@@ -300,7 +300,7 @@ export default function SimpleModePage() {
 
       {step === 'idle' && (
         <div className="card">
-          {/* 输入表单 */}
+          {/* Input form */}
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', marginBottom: 4 }}>Target Brand Name:</label>
             <input
@@ -367,7 +367,7 @@ export default function SimpleModePage() {
 
       {step !== 'idle' && (
         <div className="card">
-          {/* 进度条 */}
+          {/* Progress bar */}
           <div style={{ marginBottom: 16 }}>
             <div
               style={{
@@ -391,7 +391,7 @@ export default function SimpleModePage() {
             </p>
           </div>
 
-          {/* 终端日志窗口 */}
+          {/* Terminal log window */}
           <div
             ref={logWindowRef}
             style={{
@@ -415,7 +415,7 @@ export default function SimpleModePage() {
             ))}
           </div>
 
-          {/* 分析结果 */}
+          {/* Analysis results */}
           {step === 'analysing' && (
             <ul>
               {competitors.map((c, i) => (
@@ -424,12 +424,12 @@ export default function SimpleModePage() {
             </ul>
           )}
 
-          {/* 错误 */}
+          {/* Error */}
           {step === 'error' && <p style={{ color: 'red' }}>Error: {errorInfo}</p>}
         </div>
       )}
 
-      {/* 完成后展示邮件 */}
+      {/* Show generated email after completion */}
       {step === 'done' && (
         <div className="card">
           <h2>Generated Email</h2>
@@ -439,7 +439,7 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* 调试信息 */}
+      {/* Debug information */}
       <div className="card">
         <h3>Debug Responses</h3>
         {debugResponses.map((dbg, idx) => (

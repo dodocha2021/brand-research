@@ -70,17 +70,17 @@ export default function SimpleModePage() {
   const [emailContent, setEmailContent] = useState<string>('')
   const [debugResponses, setDebugResponses] = useState<{ step: string; data: any }[]>([])
 
-  // 用户介入相关
+  // User intervention related
   const [incompleteItems, setIncompleteItems] = useState<Item[]>([])
   const [retryingIndices, setRetryingIndices] = useState<number[]>([])
-  // 添加编辑相关状态
+  // Add edit-related states
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editingUrl, setEditingUrl] = useState<string>('')
   const [editingFollowers, setEditingFollowers] = useState<string>('')
   const [urlError, setUrlError] = useState<string>('')
   const [followersError, setFollowersError] = useState<string>('')
 
-  // scraping 轮询相关
+  // scraping polling related
   const [scrapingPolling, setScrapingPolling] = useState<boolean>(false)
   const [scrapingStatus, setScrapingStatus] = useState<string>('scraping')
 
@@ -112,15 +112,15 @@ export default function SimpleModePage() {
     }
   }, [debugResponses])
 
-  // 使用新的check-scraping-status接口来轮询状态
+  // Use check-scraping-status API to poll status
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
     
     if (scrapingPolling && searchId) {
-      // 定期检查scraping状态
+      // Periodically check scraping status
       timeoutId = setTimeout(async () => {
         try {
-          // 调用新的接口检查状态
+          // Call the new API to check status
           const res = await fetch('/api/simple-mode/check-scraping-status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -133,24 +133,24 @@ export default function SimpleModePage() {
           
           const statusData = await res.json();
           
-          // 根据返回状态进行处理
+          // Handle based on returned status
           if (statusData.isCompleted) {
             setScrapingPolling(false);
             setScrapingStatus(statusData.status);
             
-            // 根据状态决定下一步操作
+            // Decide next action based on status
             if (statusData.status === 'user_action_needed') {
-              // 需要用户处理，获取有问题的数据项
+              // User action needed, get problem items
               fetchAndShowIncompleteItems();
             } else if (statusData.status === 'ready_for_generating') {
-              // 可以直接生成邮件
+              // Can directly generate email
               handleGenerateEmailAfterScraping();
             }
           } else {
-            // 继续轮询 - 修复逻辑，使用更精确的计时
+            // Continue polling - fix logic, using more precise timing
             const waitingMsg = `Still scraping, waiting 10 seconds before continuing...`
             
-            // 关键修复：先将polling设为false，然后用timeout后再设为true，确保useEffect被重新触发
+            // Key fix: first set polling to false, then use timeout to set to true, ensure useEffect is re-triggered
             setScrapingPolling(false);
             setTimeout(() => {
               setScrapingPolling(true);
@@ -163,13 +163,13 @@ export default function SimpleModePage() {
           ]);
         } catch (e: any) {
           console.error('Failed to check scraping status:', e);
-          // 出错时也应该重新开始轮询
+          // Also restart polling when error occurs
           setScrapingPolling(false);
           setTimeout(() => {
             setScrapingPolling(true);
           }, 10000);
         }
-      }, 100); // 快速开始第一次检查
+      }, 100); // Quick start for first check
     }
     
     return () => {
@@ -177,10 +177,10 @@ export default function SimpleModePage() {
     };
   }, [scrapingPolling, searchId]);
   
-  // 获取并显示不完整的项目
+  // Get and display incomplete items
   const fetchAndShowIncompleteItems = async () => {
     try {
-      // 获取当前数据
+      // Get current data
       const res = await fetch('/api/simple-mode/get-competitor-data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -193,10 +193,10 @@ export default function SimpleModePage() {
       
       const data = await res.json();
       
-      // 找出无效数据项
+      // Find invalid data items
       const incomplete = data.items.filter((item: Item) => {
         if (item.platform === 'youtube') {
-          // 检查是否为无效数据
+          // Check if invalid data
           const followers = item.fans_count || item.followers;
           return !item.url || followers === undefined || followers === null || followers <= 200;
         } else {
@@ -205,11 +205,11 @@ export default function SimpleModePage() {
         }
       });
       
-      // 如果有无效项，显示界面让用户处理
+      // If there are invalid items, display interface for user to handle
       if (incomplete.length > 0) {
         setIncompleteItems(incomplete);
       } else {
-        // 如果实际上没有无效项，可以继续生成邮件
+        // If actually no invalid items, can continue to generate email
         handleGenerateEmailAfterScraping();
       }
     } catch (e: any) {
@@ -219,13 +219,13 @@ export default function SimpleModePage() {
     }
   };
 
-  // 单个重试
+  // Single retry
   const handleRetry = async (item: Item, index: number) => {
     setRetryingIndices((prev) => [...prev, index])
     try {
       toast.success(`Request submitted, processing...`);
       
-      // 根据平台类型选择不同的API端点和请求参数
+      // Depending on platform type, select different API endpoints and request parameters
       let apiEndpoint = '';
       let requestBody = {};
       
@@ -273,7 +273,7 @@ export default function SimpleModePage() {
         throw new Error(`Platform ${item.platform} does not support retry operation`);
       }
       
-      // 发送请求
+      // Send request
       const retryRes = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,17 +291,17 @@ export default function SimpleModePage() {
         { step: `${item.platform}-retry-request`, data: resultData },
       ]);
       
-      // 统一处理返回结果
+      // Unified processing of return result
       try {
-        // 从返回结果提取粉丝数据
+        // Extract follower data from return result
         let fans_count = null;
         
         if (item.platform === 'youtube') {
-          // 处理YouTube数据
+          // Process YouTube data
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
             
-            // 尝试不同路径获取订阅者数量
+            // Try different paths to get subscriber count
             if (firstItem.aboutChannelInfo?.numberOfSubscribers !== undefined) {
               const subCount = firstItem.aboutChannelInfo.numberOfSubscribers;
               if (typeof subCount === 'string') {
@@ -318,7 +318,7 @@ export default function SimpleModePage() {
             }
           }
         } else if (item.platform === 'tiktok') {
-          // 处理TikTok数据
+          // Process TikTok data
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
             if (firstItem.authorMeta && firstItem.authorMeta.fans !== undefined) {
@@ -326,7 +326,7 @@ export default function SimpleModePage() {
             }
           }
         } else if (item.platform === 'instagram') {
-          // 处理Instagram数据
+          // Process Instagram data
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
             if (firstItem.followersCount !== undefined) {
@@ -334,7 +334,7 @@ export default function SimpleModePage() {
             }
           }
         } else if (item.platform === 'linkedin') {
-          // 处理LinkedIn数据
+          // Process LinkedIn data
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
             if (firstItem.stats && firstItem.stats.follower_count !== undefined) {
@@ -342,7 +342,7 @@ export default function SimpleModePage() {
             }
           }
         } else if (item.platform === 'twitter') {
-          // 处理Twitter数据
+          // Process Twitter data
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
             if (firstItem.author && firstItem.author.followers !== undefined) {
@@ -352,7 +352,7 @@ export default function SimpleModePage() {
         }
         
         if (fans_count !== null) {
-          // 更新数据库
+          // Update database
           const updateRes = await fetch('/api/simple-mode/update-competitor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -370,7 +370,7 @@ export default function SimpleModePage() {
             throw new Error('Failed to update database');
           }
           
-          // 更新前端状态
+          // Update front-end state
           const isSuccess = fans_count > 200;
           updateItemInState(item.id, fans_count, isSuccess);
           
@@ -383,35 +383,35 @@ export default function SimpleModePage() {
           toast.error(`Could not extract follower count from results`);
         }
       } catch (err) {
-        console.error(`处理${item.platform}数据失败:`, err);
+        console.error(`Failed to process ${item.platform} data:`, err);
         toast.error('Failed to process data: ' + (err instanceof Error ? err.message : String(err)));
       }
       
-      // 移除重试状态
+      // Remove retry status
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
       
     } catch (e: any) {
       toast.error('Retry request failed: ' + e.message);
-      // 如果请求失败，恢复按钮状态
+      // If request fails, restore button status
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
     }
   }
   
-  // 辅助函数：更新状态中的项目数据
+  // Helper function: Update item data in state
   const updateItemInState = (itemId: string, fans_count: number, isSuccess: boolean) => {
-    // 更新本地状态
+    // Update local state
     setItems(prevItems => prevItems.map(prevItem => 
       prevItem.id === itemId 
         ? { ...prevItem, followers: fans_count, fans_count: fans_count, success: isSuccess } 
         : prevItem
     ));
     
-    // 更新incompleteItems状态 - 创建全新数组以确保重新渲染
+    // Update incompleteItems state - create brand new array to ensure re-render
     setIncompleteItems(prev => {
-      const newArray = [...prev]; // 创建新数组
+      const newArray = [...prev]; // Create new array
       const itemIndex = newArray.findIndex(it => it.id === itemId);
       if (itemIndex >= 0) {
-        // 替换为新对象
+        // Replace with new object
         newArray[itemIndex] = { 
           ...newArray[itemIndex], 
           followers: fans_count, 
@@ -419,17 +419,17 @@ export default function SimpleModePage() {
           success: isSuccess
         };
       }
-      return newArray; // 返回新数组以触发重新渲染
+      return newArray; // Return new array to trigger re-render
     });
     
-    // 强制整个界面重新渲染
+    // Force the entire interface to re-render
     forceUpdate();
   }
 
-  // 验证URL格式
+  // Validate URL format
   const validateUrl = (url: string): boolean => {
     try {
-      // 简单验证URL格式
+      // Simple URL format validation
       const urlPattern = /^(https?:\/\/)?(www\.)?[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+(\/[a-zA-Z0-9-._~:/?#[\]@!$&'()*+,;=]*)?$/;
       return urlPattern.test(url);
     } catch (e) {
@@ -437,13 +437,13 @@ export default function SimpleModePage() {
     }
   }
 
-  // 验证粉丝数
+  // Validate follower count
   const validateFollowers = (followers: string): boolean => {
     const followerNum = Number(followers);
     return !isNaN(followerNum) && followerNum > 200;
   }
 
-  // 处理编辑按钮点击
+  // Handle edit button click
   const handleEdit = (item: Item, index: number) => {
     setEditingIndex(index);
     setEditingUrl(item.url || '');
@@ -452,7 +452,7 @@ export default function SimpleModePage() {
     setFollowersError('');
   }
 
-  // 处理URL输入变化
+  // Handle URL input change
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setEditingUrl(value);
@@ -463,7 +463,7 @@ export default function SimpleModePage() {
     }
   }
 
-  // 处理粉丝数输入变化
+  // Handle follower count input change
   const handleFollowersChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setEditingFollowers(value);
@@ -474,7 +474,7 @@ export default function SimpleModePage() {
     }
   }
 
-  // 处理取消编辑
+  // Handle cancel edit
   const handleCancelEdit = () => {
     setEditingIndex(null);
     setEditingUrl('');
@@ -483,17 +483,17 @@ export default function SimpleModePage() {
     setFollowersError('');
   }
 
-  // 处理保存编辑
+  // Handle save edit
   const handleSaveEdit = async (item: Item) => {
     try {
-      // 最终验证
+      // Final validation
       if (!validateUrl(editingUrl) || !validateFollowers(editingFollowers)) {
-        return; // 验证失败，不执行保存
+        return; // Validation failed, do not execute save
       }
 
       const fans_count = Number(editingFollowers);
       
-      // 更新数据库
+      // Update database
       const updateRes = await fetch('/api/simple-mode/update-competitor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -510,11 +510,11 @@ export default function SimpleModePage() {
         throw new Error('Failed to update database');
       }
       
-      // 更新前端状态
+      // Update front-end state
       const isSuccess = fans_count > 200;
       updateItemInState(item.id, fans_count, isSuccess);
       
-      // 退出编辑模式
+      // Exit edit mode
       setEditingIndex(null);
       setEditingUrl('');
       setEditingFollowers('');
@@ -527,10 +527,10 @@ export default function SimpleModePage() {
     }
   }
 
-  // 处理删除项目
+  // Handle delete item
   const handleDeleteItem = async (item: Item, index: number) => {
     try {
-      // 从数据库删除
+      // Delete from database
       const deleteRes = await fetch('/api/simple-mode/update-competitor', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -544,35 +544,35 @@ export default function SimpleModePage() {
         throw new Error('Failed to delete from database');
       }
       
-      // 从列表中移除
+      // Remove from list
       setIncompleteItems(prev => prev.filter((_, i) => i !== index));
       setItems(prev => prev.filter(i => i.id !== item.id));
       
       toast.success(`Successfully deleted ${item.name}'s data`);
       
-      // 退出编辑模式
+      // Exit edit mode
       handleCancelEdit();
     } catch (e: any) {
       toast.error('Delete failed: ' + e.message);
     }
   }
 
-  // 修改handleIgnoreAll函数
+  // Modify handleIgnoreAll function
   const handleIgnoreAll = async () => {
     try {
-      // 只保留有效项
+      // Only keep valid items
       const validItems = items.filter(
         (item: Item) => item.followers !== undefined && item.followers !== null && item.followers >= 200
       );
       setItems(validItems);
-      setIncompleteItems([]); // 清空不完整项列表
+      setIncompleteItems([]); // Clear incomplete items list
       handleGenerateEmailAfterScraping();
     } catch (e: any) {
       toast.error('Ignore failed: ' + e.message);
     }
   };
 
-  // scraping 完成后生成邮件
+  // scraping completed, generate email
   const handleGenerateEmailAfterScraping = async () => {
     try {
       setStep('generating')
@@ -614,7 +614,7 @@ export default function SimpleModePage() {
     }
   }
 
-  // 主流程
+  // Main flow
   const handleGenerateEmail = async () => {
     try {
       setStep('creating')
@@ -654,7 +654,7 @@ export default function SimpleModePage() {
         .flatMap((name) => usePlatforms.map((p) => ({ name, platform: p, id: '' })))
       const allItems: Item[] = [...brandPlatforms, ...compItems]
 
-      // 提取URL并写入数据库
+      // Extract URL and write to database
       const itemsWithUrl: Item[] = []
       for (const it of allItems) {
         const urlRes = await fetch('/api/simple-mode/extract-url', {
@@ -667,16 +667,16 @@ export default function SimpleModePage() {
       }
       setItems(itemsWithUrl)
 
-      // 处理竞争对手数据
+      // Process competitor data
       for (const item of itemsWithUrl) {
         const updateRes = await fetch('/api/simple-mode/update-competitor', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            search_id: id, // 使用创建的 search_id
-            competitor_name: item.name, // 竞争对手名称
-            platform: item.platform, // 使用提取的实际平台
-            url: item.url, // 使用提取的实际 URL
+            search_id: id, // Use created search_id
+            competitor_name: item.name, // Competitor name
+            platform: item.platform, // Use extracted actual platform
+            url: item.url, // Use extracted actual URL
           }),
         });
 
@@ -687,7 +687,7 @@ export default function SimpleModePage() {
         ]);
       }
 
-      // scraping 步骤，调用API并开始轮询
+      // scraping step, call API and start polling
       setStep('scraping')
       await fetch('/api/simple-mode/scrape-followers', {
         method: 'POST',
@@ -704,7 +704,7 @@ export default function SimpleModePage() {
 
   return (
     <div className="container" style={{ position: 'relative' }}>
-      {/* 添加全局样式 */}
+      {/* Add global styles */}
       <style jsx global>{`
         @keyframes fadeIn {
           from {
@@ -873,7 +873,7 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* 用户介入：显示无效项和重试选项 */}
+      {/* User intervention: display invalid items and retry options */}
       {incompleteItems.length > 0 && (
         <div className="card">
           <h3>Invalid Data Detected – Action Required</h3>
@@ -883,15 +883,15 @@ export default function SimpleModePage() {
           </p>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {incompleteItems.map((item, index) => {
-              // 确定是否显示成功标记
+              // Determine whether to display success mark
               const hasValidFollowers = 
                 (item.followers !== undefined && item.followers !== null && item.followers > 200) ||
                 (item.fans_count !== undefined && item.fans_count !== null && item.fans_count > 200);
               
-              // 检查是否正在编辑该项
+              // Check if currently editing this item
               const isEditing = editingIndex === index;
               
-              // 计算Save按钮是否可用
+              // Calculate if Save button is available
               const saveEnabled = !urlError && !followersError && editingUrl && editingFollowers;
               
               return (
@@ -1064,7 +1064,7 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* 显示生成的邮件 */}
+      {/* Display generated email */}
       {step === 'done' && (
         <div className="card">
           <h2>Generated Email</h2>
@@ -1074,7 +1074,7 @@ export default function SimpleModePage() {
         </div>
       )}
 
-      {/* Debug responses */}
+      {/* Debug Responses */}
       <div className="card">
         <h3>Debug Responses</h3>
         <div

@@ -148,10 +148,10 @@ export default function SimpleModePage() {
     }
   }
 
-  // 修改 handleIgnoreAll: 当点击 ignore 时，只保留已经更新为有效的数据，而不删除 retry 后更新的数据
+  // Modified handleIgnoreAll: When clicking ignore, only keep data that has already been updated as valid, don't delete data updated after retry
   const handleIgnoreAll = async () => {
     try {
-      // 保留那些已经有效（followers 非空且大于等于200）的记录
+      // Keep records that are already valid (followers not empty and greater than or equal to 200)
       const validItems = items.filter(
         (item: Item) =>
           item.followers !== undefined &&

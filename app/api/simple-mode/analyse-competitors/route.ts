@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. 调用 GPT-4O-mini 搜索预览生成深度报告
-    const reportPrompt = `I need you to do Deep Research on the direct competitors of the brand: ${brandName}.`
+    const reportPrompt = `I need you to do Deep Research on the direct competitors of the brand: ${brandName} in north america area.`
     const report = await callGptApi(reportPrompt, 'gpt-4o-mini-search-preview')
 
     // 3. 从报告提取前 5 个竞品名称
