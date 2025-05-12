@@ -5,12 +5,12 @@ export async function POST(req: NextRequest) {
   try {
     const { brandName, region } = await req.json()
     if (!brandName) {
-      return NextResponse.json({ error: '缺少品牌名称' }, { status: 400 })
+      return NextResponse.json({ error: 'Brand name is required' }, { status: 400 })
     }
-    // 使用传入的 region 值或设定默认值
-    const regionValue = region || 'default'
+    // Use provided region value or set default
+    const regionValue = region || 'North American'
     
-    // 检查是否已有处于 idle 状态的搜索记录
+    // Check if there's an existing search record in idle status
     const { data, error } = await supabase
       .from('searches')
       .select('*')
@@ -20,11 +20,11 @@ export async function POST(req: NextRequest) {
       .single()
     
     if (data) {
-      // 存在则复用已存在的 searchId，确保后续 retry 均使用同一个 searchId
+      // Reuse existing searchId to ensure all retries use the same searchId
       return NextResponse.json({ searchId: data.id })
     }
     
-    // 如果不存在则创建新的搜索记录，并插入 region 字段
+    // If not exist, create a new search record and insert region field
     const { data: newData, error: insertError } = await supabase
       .from('searches')
       .insert({ original_brand: brandName, status: 'idle', region: regionValue })
@@ -38,6 +38,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ searchId: newData.id })
     
   } catch (error: any) {
-    return NextResponse.json({ error: error.message || '内部错误' }, { status: 500 })
+    return NextResponse.json({ error: error.message || 'Internal error' }, { status: 500 })
   }
 }

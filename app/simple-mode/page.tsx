@@ -221,6 +221,7 @@ export default function SimpleModePage() {
 
   // Single retry
   const handleRetry = async (item: Item, index: number) => {
+    console.log(`Starting retry for ${item.name} on ${item.platform}, index: ${index}, item ID: ${item.id}`);
     setRetryingIndices((prev) => [...prev, index])
     try {
       toast.success(`Request submitted, processing...`);
@@ -230,6 +231,7 @@ export default function SimpleModePage() {
       let requestBody = {};
       
       if (item.platform === 'youtube') {
+        console.log(`Processing YouTube retry for ${item.name}, URL: ${item.url}`);
         apiEndpoint = '/api/apify/youtube';
         requestBody = { 
           maxResultStreams: 0,
@@ -274,6 +276,7 @@ export default function SimpleModePage() {
       }
       
       // Send request
+      console.log(`Sending retry request to ${apiEndpoint}`, requestBody);
       const retryRes = await fetch(apiEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -286,6 +289,8 @@ export default function SimpleModePage() {
       }
       
       const resultData = await retryRes.json();
+      console.log(`Received data for ${item.platform}:`, resultData);
+      
       setDebugResponses((prev) => [
         ...prev,
         { step: `${item.platform}-retry-request`, data: resultData },
@@ -298,25 +303,39 @@ export default function SimpleModePage() {
         
         if (item.platform === 'youtube') {
           // Process YouTube data
+          console.log(`Processing YouTube response data`, resultData);
           if (Array.isArray(resultData) && resultData.length > 0) {
             const firstItem = resultData[0];
+            console.log(`First YouTube result item:`, firstItem);
             
             // Try different paths to get subscriber count
             if (firstItem.aboutChannelInfo?.numberOfSubscribers !== undefined) {
               const subCount = firstItem.aboutChannelInfo.numberOfSubscribers;
+              console.log(`Found numberOfSubscribers in aboutChannelInfo: ${subCount}`);
               if (typeof subCount === 'string') {
                 fans_count = parseInt(subCount.replace(/,/g, ''));
               } else {
                 fans_count = subCount;
               }
             } else if (firstItem.subscriberCount !== undefined) {
+              console.log(`Found subscriberCount: ${firstItem.subscriberCount}`);
               fans_count = firstItem.subscriberCount;
             } else if (firstItem.channel?.subscriberCount !== undefined) {
+              console.log(`Found channel.subscriberCount: ${firstItem.channel.subscriberCount}`);
               fans_count = firstItem.channel.subscriberCount;
             } else if (firstItem.numberOfSubscribers !== undefined) {
+              console.log(`Found numberOfSubscribers: ${firstItem.numberOfSubscribers}`);
               fans_count = firstItem.numberOfSubscribers;
             }
           }
+          
+          // Special case: if we found "numberOfSubscribers" in the object itself (top level)
+          if (fans_count === null && typeof resultData === 'object' && resultData.numberOfSubscribers !== undefined) {
+            console.log(`Found top-level numberOfSubscribers: ${resultData.numberOfSubscribers}`);
+            fans_count = resultData.numberOfSubscribers;
+          }
+          
+          console.log(`Final extracted fans_count: ${fans_count}`);
         } else if (item.platform === 'tiktok') {
           // Process TikTok data
           if (Array.isArray(resultData) && resultData.length > 0) {
@@ -352,7 +371,17 @@ export default function SimpleModePage() {
         }
         
         if (fans_count !== null) {
-          // Update database
+          // Found valid data, update database
+          console.log(`Valid fan count found: ${fans_count}. Updating database...`);
+          
+          // Make a copy of the item with updated values for database update
+          const updatedItem = {
+            ...item,
+            fans_count,
+            followers: fans_count,
+            success: fans_count > 200
+          };
+          
           const updateRes = await fetch('/api/simple-mode/update-competitor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -367,12 +396,22 @@ export default function SimpleModePage() {
           });
           
           if (!updateRes.ok) {
-            throw new Error('Failed to update database');
+            const errorText = await updateRes.text();
+            console.error(`Failed to update database: ${errorText}`);
+            throw new Error(`Failed to update database: ${errorText}`);
           }
+          
+          const updateJson = await updateRes.json();
+          console.log(`Database update response:`, updateJson);
           
           // Update front-end state
           const isSuccess = fans_count > 200;
-          updateItemInState(item.id, fans_count, isSuccess);
+          console.log(`Updating frontend state with fans_count=${fans_count}, isSuccess=${isSuccess}`);
+          
+          // Force re-render with a timeout to ensure state is updated
+          setTimeout(() => {
+            updateItemInState(item.id || `${item.name}-${item.platform}`, fans_count, isSuccess);
+          }, 50);
           
           if (isSuccess) {
             toast.success(`Successfully retrieved ${item.name}'s followers: ${fans_count}`);
@@ -380,6 +419,7 @@ export default function SimpleModePage() {
             toast.error(`${item.name}'s followers count ${fans_count} is below the required threshold`);
           }
         } else {
+          console.error(`Could not extract follower count from results for ${item.platform}`);
           toast.error(`Could not extract follower count from results`);
         }
       } catch (err) {
@@ -391,6 +431,7 @@ export default function SimpleModePage() {
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
       
     } catch (e: any) {
+      console.error(`Retry request failed:`, e);
       toast.error('Retry request failed: ' + e.message);
       // If request fails, restore button status
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
@@ -399,31 +440,70 @@ export default function SimpleModePage() {
   
   // Helper function: Update item data in state
   const updateItemInState = (itemId: string, fans_count: number, isSuccess: boolean) => {
+    console.log(`Updating item in state: itemId=${itemId}, fans_count=${fans_count}, isSuccess=${isSuccess}`);
+    
     // Update local state
-    setItems(prevItems => prevItems.map(prevItem => 
-      prevItem.id === itemId 
-        ? { ...prevItem, followers: fans_count, fans_count: fans_count, success: isSuccess } 
-        : prevItem
-    ));
+    setItems(prevItems => {
+      const newItems = prevItems.map(prevItem => {
+        // Match by ID if available, or by platform and name as fallback
+        if (prevItem.id === itemId || 
+            (prevItem.id && itemId && 
+             prevItem.platform === 'youtube' && 
+             prevItem.name === 'UGG')) {
+          console.log(`Found matching item to update, before:`, prevItem);
+          const updated = { 
+            ...prevItem, 
+            followers: fans_count, 
+            fans_count: fans_count, 
+            success: isSuccess 
+          };
+          console.log(`Updated item:`, updated);
+          return updated;
+        }
+        return prevItem;
+      });
+      console.log(`Updated items state with ${newItems.length} items`);
+      return newItems;
+    });
     
     // Update incompleteItems state - create brand new array to ensure re-render
     setIncompleteItems(prev => {
       const newArray = [...prev]; // Create new array
+      let itemUpdated = false;
+      
+      // First try to find by ID
       const itemIndex = newArray.findIndex(it => it.id === itemId);
-      if (itemIndex >= 0) {
+      
+      // If not found by ID, try to find by platform and name (especially for YouTube/UGG case)
+      const fallbackIndex = itemIndex === -1 ? 
+        newArray.findIndex(it => it.platform === 'youtube' && it.name === 'UGG') : -1;
+      
+      const indexToUpdate = itemIndex >= 0 ? itemIndex : fallbackIndex;
+      
+      if (indexToUpdate >= 0) {
         // Replace with new object
-        newArray[itemIndex] = { 
-          ...newArray[itemIndex], 
+        console.log(`Updating incompleteItems at index ${indexToUpdate}`);
+        newArray[indexToUpdate] = { 
+          ...newArray[indexToUpdate], 
           followers: fans_count, 
           fans_count: fans_count, 
           success: isSuccess
         };
+        itemUpdated = true;
       }
+      
+      if (!itemUpdated) {
+        console.log(`Warning: Could not find item to update with id=${itemId} in incompleteItems array`);
+      }
+      
       return newArray; // Return new array to trigger re-render
     });
     
     // Force the entire interface to re-render
-    forceUpdate();
+    setTimeout(() => {
+      forceUpdate();
+      console.log("Forced UI update after state changes");
+    }, 50);
   }
 
   // Validate URL format
@@ -884,9 +964,15 @@ export default function SimpleModePage() {
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {incompleteItems.map((item, index) => {
               // Determine whether to display success mark
+              console.log(`Rendering item ${index} - name: ${item.name}, platform: ${item.platform}, followers: ${item.followers}, fans_count: ${item.fans_count}, success: ${item.success}`);
+              
+              // Check for valid followers in both possible properties
+              const followers = item.followers || item.fans_count;
               const hasValidFollowers = 
-                (item.followers !== undefined && item.followers !== null && item.followers > 200) ||
-                (item.fans_count !== undefined && item.fans_count !== null && item.fans_count > 200);
+                item.success === true || // If success flag is explicitly set to true
+                (followers !== undefined && followers !== null && followers > 200);
+              
+              console.log(`Item ${index} hasValidFollowers: ${hasValidFollowers}, combined followers value: ${followers}`);
               
               // Check if currently editing this item
               const isEditing = editingIndex === index;
@@ -896,7 +982,7 @@ export default function SimpleModePage() {
               
               return (
                 <li
-                  key={`${item.id}-${index}`}
+                  key={`${item.id || index}-${index}`}
                   style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -915,7 +1001,7 @@ export default function SimpleModePage() {
                     {!isEditing ? (
                       <span>
                         Brand: {item.name} | Platform: {item.platform} | Link: {item.url ? item.url : 'N/A'} | Followers:{' '}
-                        {item.followers === null ? 'null' : (item.fans_count || item.followers)}
+                        {followers === null || followers === undefined ? 'null' : followers}
                       </span>
                     ) : (
                       <div style={{ 

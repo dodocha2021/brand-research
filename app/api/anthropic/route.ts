@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json()
     
-    // 转换 Anthropic 的返回格式为 OpenAI 格式
+    // Convert Anthropic response format to OpenAI format
     return NextResponse.json({
       choices: [{
         message: {
