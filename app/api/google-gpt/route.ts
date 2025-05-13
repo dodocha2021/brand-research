@@ -175,6 +175,175 @@ ${context}`
   }
 }
 
+// === 新增：使用OpenAI进行二次搜索 ===
+async function searchWithOpenAI(query: string, platform: string, searchResults: any[]): Promise<string> {
+  console.log('\n===== OPENAI BACKUP SEARCH =====')
+  
+  // 第一步: 使用gpt-4o-mini-search-preview进行网络搜索
+  try {
+    console.log('Step 1: Searching with gpt-4o-mini-search-preview...')
+    const searchSystemPrompt = `You are a professional social media URL finder specialized in identifying official brand accounts.
+You can search the web to find official brand accounts.
+Your task is to find potential official account URLs for the specified brand on the specified platform.
+
+Rules for identifying OFFICIAL accounts:
+1. Has verification badge or indicators of being official
+2. Username/handle matches or relates to the brand name
+3. Profile description or content suggests it's an official channel
+4. Has significant follower count or engagement
+5. Content appears professional and brand-related
+
+Response Rules:
+1. Search the web to find likely official accounts
+2. Return up to 3 most likely URLs, each on a new line
+3. Do not provide any explanations or additional text
+4. If you cannot find any official accounts, return an empty string`
+
+    const searchUserPrompt = `Brand: ${query.split(' ')[0]}
+Platform: ${platform}
+
+Find the most likely official account URLs for this brand on ${platform}.
+Search the web to verify information and check account authenticity.
+Return ONLY the URLs (maximum 3), each on a new line, with no explanations.`
+    
+    const searchRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-search-preview',
+        messages: [
+          {
+            role: 'system',
+            content: searchSystemPrompt
+          },
+          {
+            role: 'user',
+            content: searchUserPrompt
+          }
+        ],
+        max_tokens: 2000
+      })
+    })
+
+    if (!searchRes.ok) {
+      console.error('GPT-4o-mini-search-preview API error:', searchRes.status)
+      return ''
+    }
+    
+    const searchData = await searchRes.json()
+    const miniResults = searchData?.choices?.[0]?.message?.content?.trim() || ''
+    
+    console.log('URLs found by gpt-4o-mini-search-preview:')
+    console.log(miniResults)
+    
+    // 提取Google搜索结果中的URL
+    const googleURLs = searchResults
+      .map((item: any) => item.link)
+      .filter((url: string) => url.includes(`${platform}.com`))
+      .slice(0, 5)  // 最多取5个URL
+    
+    console.log('URLs from Google search:')
+    console.log(googleURLs)
+    
+    // 合并两种来源的URL
+    let allURLs: string[] = []
+    
+    // 添加GPT-4o-mini找到的URL
+    if (miniResults && miniResults !== "No URLs found") {
+      const miniURLs = miniResults.split('\n').filter((url: string) => url.trim() && url.startsWith('http'))
+      allURLs = [...miniURLs]
+    }
+    
+    // 添加Google搜索结果中的URL (确保不重复)
+    googleURLs.forEach((url: string) => {
+      if (!allURLs.includes(url)) {
+        allURLs.push(url)
+      }
+    })
+    
+    console.log('Combined URLs for verification:')
+    console.log(allURLs)
+    
+    // 如果没有找到任何URL，返回空字符串
+    if (allURLs.length === 0) {
+      console.log('No URLs found from either source')
+      return ''
+    }
+    
+    // 第二步: 再次使用gpt-4o-mini-search-preview验证和选择最佳URL
+    console.log('Step 2: Verifying URLs with gpt-4o-mini-search-preview...')
+    const verifySystemPrompt = `You are a professional social media URL verification expert.
+Your task is to verify which ONE of the provided URLs is most likely to be the official account for the specified brand.
+
+Rules for identifying OFFICIAL accounts (must meet at least 2 of these criteria):
+1. Has verification badge or indicators of being official
+2. Username/handle matches or relates to the brand name
+3. Profile description or content suggests it's an official channel
+4. Has significant follower count or engagement
+5. Content appears professional and brand-related
+
+Response Rules:
+1. Visit each URL and verify its authenticity
+2. Search the web for additional information if needed
+3. Return ONLY the single most credible URL, with no explanatory text
+4. If none of the URLs seem authentic, return an empty string`
+
+    const verifyUserPrompt = `Brand: ${query.split(' ')[0]}
+Platform: ${platform}
+
+Analyze these potential URLs and determine which ONE is most likely to be the official account.
+Visit each URL to check its authenticity and credentials.
+Return ONLY the single most likely official URL or empty string, nothing else.
+
+Potential URLs:
+${allURLs.join('\n')}`
+    
+    const verifyRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-search-preview',
+        messages: [
+          {
+            role: 'system',
+            content: verifySystemPrompt
+          },
+          {
+            role: 'user',
+            content: verifyUserPrompt
+          }
+        ],
+        max_tokens: 2000
+      })
+    })
+
+    if (!verifyRes.ok) {
+      console.error('GPT-4o-mini-search-preview verification API error:', verifyRes.status)
+      return ''
+    }
+    
+    const verifyData = await verifyRes.json()
+    let finalResult = verifyData?.choices?.[0]?.message?.content?.trim() || ''
+    
+    // 确保结果只包含URL
+    if (finalResult && !finalResult.startsWith('http')) {
+      finalResult = ''
+    }
+    
+    console.log('Final verified URL:', finalResult)
+    return finalResult
+  } catch (e) {
+    console.error('OpenAI backup search error:', e)
+    return ''
+  }
+}
+
 // === API Route Handler ===
 export async function POST(req: NextRequest) {
   try {
@@ -198,7 +367,15 @@ export async function POST(req: NextRequest) {
     const query = `${brand} official ${platform} site:${domain}`
     console.log('Search query:', query)
 
-    // ===== 实现双循环策略 =====
+    // ===== 启动两个并行搜索 =====
+    console.log('\n===== STARTING PARALLEL SEARCHES =====')
+    
+    // 1. 启动GPT-4o-mini搜索 (异步)
+    console.log('\n----- STARTING GPT-4O-MINI SEARCH -----')
+    const miniSearchPromise = searchWithMini(brand, platform)
+    
+    // 2. 同时启动Google+GPT搜索 (原有逻辑)
+    console.log('\n----- STARTING GOOGLE+GPT SEARCH -----')
     
     // 定义所有区域
     const allRegions = ['Global', 'North America', 'Europe', 'Asia-Pacific', 'Latin America', 'Middle East & Africa']
@@ -214,7 +391,7 @@ export async function POST(req: NextRequest) {
       searchRegions.push('Global')
     }
     
-    // 双循环开始
+    // 开始Google+GPT搜索
     let url = '';
     let finalSearchResults = [];
     let found = false;
@@ -261,13 +438,64 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ===== 等待两个搜索都完成 =====
+    console.log('\n===== WAITING FOR ALL SEARCHES TO COMPLETE =====')
+    
+    // 等待GPT-4o-mini搜索完成
+    const miniURLs = await miniSearchPromise
+    console.log('GPT-4o-mini search completed')
+    
+    // 仅使用Google+GPT搜索找到的URL，不从搜索结果中提取额外URL
+    const googleURLs = url ? [url] : [];
+
+    console.log('\n===== URL SEARCH RESULTS =====')
+    console.log('URL from Google+GPT search:')
+    console.log(googleURLs)
+    console.log('URLs from GPT-4o-mini search:')
+    console.log(miniURLs)
+
+    // 合并两种来源的URL
+    let allURLs: string[] = []
+
+    // 添加找到的所有URL (去重)
+    const addUniqueURLs = (urls: string[]) => {
+      urls.forEach((url: string) => {
+        if (url && url.startsWith('http') && !allURLs.includes(url)) {
+          allURLs.push(url)
+        }
+      })
+    }
+
+    addUniqueURLs(miniURLs)
+    addUniqueURLs(googleURLs)
+
+    console.log('\n===== COMBINED URLS FOR VERIFICATION =====')
+    console.log(allURLs)
+
+    // 如果有URL可供验证，执行最终验证
+    let finalURL = ''
+    if (allURLs.length > 0) {
+      console.log('\n===== STARTING FINAL VERIFICATION =====')
+      finalURL = await verifyBestURL(brand, platform, allURLs)
+      
+      if (finalURL) {
+        console.log(`✅ FINAL VERIFICATION SUCCESSFUL: ${finalURL}`)
+      } else {
+        console.log('❌ FINAL VERIFICATION FOUND NO VALID URL')
+      }
+    } else {
+      console.log('❌ NO URLS FOUND FOR VERIFICATION')
+      // 没有URL可供验证，直接返回空字符串
+      finalURL = ''
+    }
+
     console.log(`\n===== FINAL RESULT =====`)
-    console.log(`URL found: ${found ? 'YES' : 'NO'}`)
-    console.log(`Final URL: ${url || 'No URL found across all region combinations'}`)
+    console.log(`URL found: ${finalURL ? 'YES' : 'NO'}`)
+    console.log(`Final URL: ${finalURL || 'No valid URL found'}`)
     
     return NextResponse.json({ 
       success: true,
-      url,
+      url: finalURL,
       searchResults: finalSearchResults
     })
   } catch (e: any) {
@@ -277,5 +505,173 @@ export async function POST(req: NextRequest) {
       error: e.message || 'Unknown error',
       url: ''
     }, { status: 500 })
+  }
+}
+
+// === 独立的GPT-4o-mini搜索函数 ===
+async function searchWithMini(brand: string, platform: string): Promise<string[]> {
+  console.log('Starting GPT-4o-mini search...')
+  
+  try {
+    const searchSystemPrompt = `You are a web search specialist focused on finding social media accounts.
+Your task is to search the web and find official social media accounts for the specified brand.
+
+For the search:
+1. Focus specifically on finding the brand's official account on the specified platform
+2. Use search queries that include the brand name, platform name, and terms like "official account"
+3. Look for verification badges, official websites linking to the account, or brand mentions
+
+When identifying official accounts, prioritize:
+1. Verified accounts (blue checkmark or platform verification)
+2. Account handles/names matching the brand name
+3. Accounts linked from the brand's official website
+4. Accounts with significant followers and professional content
+5. Accounts with regular posting activity related to the brand
+
+Return up to 3 most credible URLs (direct links to the profiles), each on a new line.
+Return ONLY the URLs - no explanations, prefixes, or other text.
+If you cannot find credible official accounts, return an empty string.`
+
+    const searchUserPrompt = `Brand: ${brand}
+Platform: ${platform}
+
+Search the web for this brand's official ${platform} account.
+Verify the authenticity of accounts before returning them.
+Return only the URLs (max 3), each on a separate line.`
+    
+    const searchRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-search-preview',
+        messages: [
+          {
+            role: 'system',
+            content: searchSystemPrompt
+          },
+          {
+            role: 'user',
+            content: searchUserPrompt
+          }
+        ],
+        max_tokens: 2000
+      })
+    })
+
+    if (!searchRes.ok) {
+      const errorText = await searchRes.text();
+      console.error('GPT-4o-mini-search-preview API error:', searchRes.status);
+      console.error('Error details:', errorText);
+      return []
+    }
+    
+    const searchData = await searchRes.json()
+    const miniResults = searchData?.choices?.[0]?.message?.content?.trim() || ''
+    
+    console.log('Raw URLs found by gpt-4o-mini-search-preview:')
+    console.log(miniResults)
+    
+    // 解析找到的URL
+    if (miniResults && miniResults !== "No URLs found") {
+      return miniResults.split('\n')
+        .map((url: string) => url.trim())
+        .filter((url: string) => url && url.startsWith('http'))
+    }
+    
+    return []
+  } catch (e) {
+    console.error('GPT-4o-mini search error:', e)
+    return []
+  }
+}
+
+// === 最终URL验证函数 ===
+async function verifyBestURL(brand: string, platform: string, urls: string[]): Promise<string> {
+  console.log('Verifying best URL from combined results...')
+  
+  try {
+    const verifySystemPrompt = `You are a social media verification specialist with access to the web.
+Your task is to determine which ONE URL from the provided list is most likely to be the OFFICIAL account for the brand.
+
+Verification process:
+1. ACTUALLY VISIT each URL and check the content - this is critical
+2. Ensure the account page loads properly and does NOT show errors like "This account doesn't exist", "Page not found", or "Account suspended"
+3. For valid pages, check for verification badges, follower counts, and content relevance
+4. Search the web for the brand's official website and check which social accounts they link to
+5. Consider username/handle relevance to the brand name
+6. Check for recent activity and engagement on the account
+
+CRITICAL INSTRUCTIONS:
+- You MUST actually open and view each URL to verify it exists and is active
+- IMMEDIATELY REJECT any URL that returns errors, doesn't load, or shows messages like "Account doesn't exist"
+- Only return a URL if you are at least 60% confident it is the official account AND the page loads properly
+- Not every brand has an official account on every platform - empty string is better than wrong URL
+- Many URLs may be fan pages, competitors, or unrelated content - be vigilant
+
+RESPONSE FORMAT:
+- If you find a valid, accessible URL with >60% confidence: Return ONLY that URL
+- If URLs don't load, show errors, or you're not confident: Return an empty string
+- Do not include ANY explanation or additional text - ONLY the URL or empty string`
+
+    const verifyUserPrompt = `Brand: ${brand}
+Platform: ${platform}
+
+VISIT and analyze each of these URLs to determine which ONE is most likely the official ${platform} account for ${brand}.
+IMPORTANT: Actively open each link and verify the page loads correctly without errors like "This account doesn't exist".
+Reject any URLs that don't load properly or show error messages.
+
+Only return a URL if:
+1. The page loads successfully (no errors or "account not found" messages)
+2. You are at least 60% confident it is the official account
+Otherwise, return an empty string.
+
+URLs to verify:
+${urls.join('\n')}`
+    
+    const verifyRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-search-preview',
+        messages: [
+          {
+            role: 'system',
+            content: verifySystemPrompt
+          },
+          {
+            role: 'user',
+            content: verifyUserPrompt
+          }
+        ],
+        max_tokens: 2000
+      })
+    })
+
+    if (!verifyRes.ok) {
+      const errorText = await verifyRes.text();
+      console.error('GPT-4o-mini-search-preview verification API error:', verifyRes.status);
+      console.error('Verification error details:', errorText);
+      return ''
+    }
+    
+    const verifyData = await verifyRes.json()
+    let finalResult = verifyData?.choices?.[0]?.message?.content?.trim() || ''
+    
+    // 确保结果只包含URL
+    if (finalResult && !finalResult.startsWith('http')) {
+      finalResult = ''
+    }
+    
+    console.log('Verification result:', finalResult)
+    return finalResult
+  } catch (e) {
+    console.error('URL verification error:', e)
+    return ''
   }
 }
