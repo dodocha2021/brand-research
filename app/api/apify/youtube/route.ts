@@ -51,7 +51,8 @@ export async function POST(req: NextRequest) {
           aboutChannelInfo: data[0].aboutChannelInfo,
           channelName: data[0].channelName,
           channelUrl: data[0].channelUrl,
-          numberOfSubscribers: data[0].aboutChannelInfo?.numberOfSubscribers || null
+          numberOfSubscribers: data[0].aboutChannelInfo?.numberOfSubscribers || null,
+          channelTotalViews: data[0].aboutChannelInfo?.channelTotalViews || null
         };
         
         console.log(`YouTube API response for ${input.startUrls[0].url}:`, 
@@ -59,7 +60,8 @@ export async function POST(req: NextRequest) {
             status: res.status,
             success: res.ok,
             hasSubscribers: !!data[0].aboutChannelInfo?.numberOfSubscribers,
-            subscribersCount: data[0].aboutChannelInfo?.numberOfSubscribers || 'null'
+            subscribersCount: data[0].aboutChannelInfo?.numberOfSubscribers || 'null',
+            channelTotalViews: data[0].aboutChannelInfo?.channelTotalViews || 'null'
           })
         );
         
@@ -76,7 +78,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         error: 'Request timeout',
         aboutChannelInfo: {
-          numberOfSubscribers: null
+          numberOfSubscribers: null,
+          channelTotalViews: null
         }
       }, { status: 408 })
     }
@@ -84,7 +87,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ 
       error: e.message,
       aboutChannelInfo: {
-        numberOfSubscribers: null
+        numberOfSubscribers: null,
+        channelTotalViews: null
       }
     }, { status: 500 })
   }

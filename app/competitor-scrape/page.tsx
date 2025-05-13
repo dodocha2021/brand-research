@@ -147,7 +147,8 @@ export default function CompetitorScrapePage() {
             return {
               ...row,
               logo: info?.aboutChannelInfo?.channelAvatarUrl || '',
-              followers: info?.aboutChannelInfo?.numberOfSubscribers ?? ''
+              followers: info?.aboutChannelInfo?.numberOfSubscribers ?? '',
+              channelTotalViews: info?.aboutChannelInfo?.channelTotalViews ?? ''
             }
           } catch (e) {
             return { ...row }
@@ -275,13 +276,19 @@ export default function CompetitorScrapePage() {
         
         updatedRow.logo = info?.aboutChannelInfo?.channelAvatarUrl || ''
         updatedRow.followers = info?.aboutChannelInfo?.numberOfSubscribers ?? ''
+        updatedRow.channelTotalViews = info?.aboutChannelInfo?.channelTotalViews ?? ''
         
         // 记录更新后的数据
         console.log('更新后的followers值:', updatedRow.followers)
       }
       // 更新本地rows
       console.log('即将更新本地rows, 更新的行:', JSON.stringify(updatedRow))
-      setRows(prevRows => prevRows.map((r, i) => (i === idx ? { ...r, logo: updatedRow.logo, followers: updatedRow.followers } : r)))
+      setRows(prevRows => prevRows.map((r, i) => (i === idx ? { 
+        ...r, 
+        logo: updatedRow.logo, 
+        followers: updatedRow.followers,
+        channelTotalViews: updatedRow.channelTotalViews 
+      } : r)))
       // 同步到 supabase
       console.log('即将同步到supabase, id:', row.id, '数据:', JSON.stringify({logo: updatedRow.logo, followers: updatedRow.followers}))
       await supabase
@@ -321,7 +328,7 @@ export default function CompetitorScrapePage() {
               <th>Logo</th>
               <th>URL</th>
               <th>Followers</th>
-              <th>Created At</th>
+              <th>Channel Total Views</th>
               <th></th>
             </tr>
           </thead>
@@ -384,8 +391,9 @@ export default function CompetitorScrapePage() {
                 </td>
                 <td>
                   <input
-                    value={row.created_at ? new Date(row.created_at).toLocaleString() : ''}
+                    value={row.platform === 'youtube' ? (row.channelTotalViews || '') : ''}
                     disabled
+                    style={{ color: row.platform === 'youtube' ? 'inherit' : '#a0a0a0' }}
                   />
                 </td>
                 <td style={{ textAlign: 'center' }}>

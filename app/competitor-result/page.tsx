@@ -111,24 +111,23 @@ export default function CompetitorResultPage() {
 
       const newRows = []
       for (const row of processedRows) {
-        const prompt = PLATFORM_PROMPTS[row.platform]
-          .replace('{{1.Competitor}}', row.competitor_name)
-          .replace('{{1.OriginalBrand}}', row.original_brand)
-          .replace('{{region}}', row.region)
         let url = ''
         try {
-          const res = await fetch('/api/openai', {
+          // 使用google-gpt路由替代openai路由
+          const res = await fetch('/api/google-gpt', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              model: 'gpt-4o-mini-search-preview',
-              max_tokens: 256,
-              messages: [{ role: 'user', content: prompt }]
+              brand: row.competitor_name,
+              platform: row.platform,
+              region: row.region
             })
           })
           const data = await res.json()
-          url = data?.choices?.[0]?.message?.content?.trim() || ''
-        } catch {}
+          url = data?.url || ''
+        } catch (error) {
+          console.error('Google-GPT fetch error:', error)
+        }
         newRows.push({
           ...row,
           competitor_url: url
