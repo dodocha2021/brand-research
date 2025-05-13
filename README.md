@@ -57,6 +57,17 @@ This project is a full-stack web application for **brand competitor research, da
 - **Utilities:** SWR, React Hot Toast, React Markdown  
 - **Tooling:** ESLint, Prettier, PostCSS, Autoprefixer
 
+## Code Statistics
+
+- **Total Lines of Code:** 16,226 lines
+- **Application Code:** ~8,787 lines (excluding package-lock.json)
+- **Main Components:**
+  - Frontend Pages: ~3,500 lines
+  - API Routes: ~2,000 lines
+  - Library & Utilities: ~500 lines
+  - Configuration: ~7,500 lines (mostly dependencies)
+- **Version:** 1.7.8
+
 ## Quick Start
 
 1. **Clone the repository**
@@ -148,7 +159,7 @@ README.md
   - Edit mode to modify fields and save changes back to the database.
 
 - `/competitor-result` (Competitor Result)  
-  - Display competitor search history and expand “all platform” rows into multiple platform entries.  
+  - Display competitor search history and expand "all platform" rows into multiple platform entries.  
   - Auto-fill URLs via GPT prompts, edit, and save the final data.
 
 - `/email-editor` (Email Editor)  

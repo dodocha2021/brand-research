@@ -198,20 +198,77 @@ export async function POST(req: NextRequest) {
     const query = `${brand} official ${platform} site:${domain}`
     console.log('Search query:', query)
 
-    // Step 1: Google Search
-    console.log('Starting Google Search...')
-    const searchResults = await googleSearch(query, region)
-    console.log('Search results count:', searchResults.length)
+    // ===== 实现双循环策略 =====
+    
+    // 定义所有区域
+    const allRegions = ['Global', 'North America', 'Europe', 'Asia-Pacific', 'Latin America', 'Middle East & Africa']
+    
+    // 外循环：Google搜索区域（只尝试用户区域和Global）
+    const searchRegions = []
+    
+    // 将用户选择的区域放在第一位
+    searchRegions.push(region)
+    
+    // 如果用户没选Global，将Global作为第二选择
+    if (region !== 'Global') {
+      searchRegions.push('Global')
+    }
+    
+    // 双循环开始
+    let url = '';
+    let finalSearchResults = [];
+    let found = false;
+    
+    // 外循环：Google搜索不同区域
+    for (const searchRegion of searchRegions) {
+      if (found) break; // 如果已找到URL，跳出循环
+      
+      console.log(`\n===== GOOGLE SEARCH: Region "${searchRegion}" =====`)
+      
+      // 执行Google搜索
+      const searchResults = await googleSearch(query, searchRegion)
+      console.log(`Google search returned ${searchResults.length} results`)
+      
+      // 保存最后一次搜索结果
+      finalSearchResults = searchResults
+      
+      // 如果没有搜索结果，尝试下一个搜索区域
+      if (searchResults.length === 0) {
+        console.log('No search results for this region, trying next search region...')
+        continue
+      }
+      
+      // 内循环：AI分析不同区域
+      // 对搜索结果，尝试用所有区域进行AI分析
+      for (const analysisRegion of allRegions) {
+        if (found) break; // 如果已找到URL，跳出循环
+        
+        console.log(`\n----- AI ANALYSIS: Region "${analysisRegion}" -----`)
+        console.log(`Analyzing ${searchResults.length} results from search region "${searchRegion}"`)
+        console.log(`Using AI model: ${aiModel}, Analysis region: ${analysisRegion}`)
+        
+        // 执行AI分析
+        url = await extractBestLink(searchResults, query, platform, analysisRegion, aiModel)
+        
+        // 如果找到URL，标记并跳出循环
+        if (url) {
+          console.log(`✅ FOUND URL using search region "${searchRegion}" and analysis region "${analysisRegion}": ${url}`)
+          found = true
+          break
+        } else {
+          console.log(`No URL found with analysis region "${analysisRegion}", trying next analysis region...`)
+        }
+      }
+    }
 
-    // Step 2: AI Analysis
-    console.log('Starting AI Analysis...')
-    const url = await extractBestLink(searchResults, query, platform, region, aiModel)
-
-    console.log('✅ Process completed. URL:', url)
+    console.log(`\n===== FINAL RESULT =====`)
+    console.log(`URL found: ${found ? 'YES' : 'NO'}`)
+    console.log(`Final URL: ${url || 'No URL found across all region combinations'}`)
+    
     return NextResponse.json({ 
       success: true,
       url,
-      searchResults
+      searchResults: finalSearchResults
     })
   } catch (e: any) {
     console.error('❌ API Error:', e)
