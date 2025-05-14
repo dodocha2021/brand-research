@@ -113,20 +113,21 @@ export default function CompetitorResultPage() {
       for (const row of processedRows) {
         let url = ''
         try {
-          // 使用google-gpt路由替代openai路由
-          const res = await fetch('/api/google-gpt', {
+          // 使用gpt4o_search的social_account_single任务
+          const res = await fetch('/api/gpt4o_search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              brand: row.competitor_name,
+              query: row.competitor_name,
+              task: 'social_account_single',
               platform: row.platform,
               region: row.region
             })
           })
           const data = await res.json()
-          url = data?.url || ''
+          url = data?.results?.[0] || ''
         } catch (error) {
-          console.error('Google-GPT fetch error:', error)
+          console.error('GPT-4o search API error:', error)
         }
         newRows.push({
           ...row,

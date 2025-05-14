@@ -20,7 +20,7 @@ const MODEL_CONFIGS: ModelConfigs = {
   'gpt-4o': {
     max_tokens: 2048
   },
-  'gpt-4o-mini-search-preview': {
+  'gpt-4o-search-preview-2025-03-11': {
     max_tokens: 2000
   }
 }
@@ -32,9 +32,21 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { messages, model = 'gpt-4o' }: { messages: Message[], model?: string } = await req.json()
+    const { messages, model = 'gpt-4o', temperature }: { messages: Message[], model?: string, temperature?: number } = await req.json()
     
     const modelConfig = MODEL_CONFIGS[model] || MODEL_CONFIGS['gpt-4o']
+    
+    // 创建请求体对象
+    const requestBody: any = {
+      model,
+      messages: messages.map(({ model: _, ...msg }) => msg),
+      ...modelConfig
+    }
+    
+    // 如果提供了temperature参数，添加到请求中
+    if (temperature !== undefined) {
+      requestBody.temperature = temperature
+    }
     
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -42,11 +54,7 @@ export async function POST(req: NextRequest) {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        model,
-        messages: messages.map(({ model: _, ...msg }) => msg),
-        ...modelConfig
-      })
+      body: JSON.stringify(requestBody)
     })
 
     if (!response.ok) {

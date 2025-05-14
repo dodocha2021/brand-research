@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import * as gpt4oSearchModule from '../gpt4o_search/route'
 
 // === Environment Variables ===
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY!
@@ -131,31 +132,46 @@ ${context}`
       })
     } else {
       // GPT API调用
+      const requestBody: any = {
+        model: 'gpt-4o-search-preview-2025-03-11',
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt
+          },
+          {
+            role: 'user',
+            content: userPrompt
+          }
+        ],
+        max_tokens: 2000,
+        response_format: {
+          type: "text"
+        },
+        web_search_options: {
+          user_location: {
+            type: "approximate",
+            approximate: {
+              country: ""
+            }
+          }
+        }
+      }
+      
       res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${OPENAI_API_KEY}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'gpt-4o',
-          messages: [
-            {
-              role: 'system',
-              content: systemPrompt
-            },
-            {
-              role: 'user',
-              content: userPrompt
-            }
-          ],
-          temperature: 0.1
-        })
+        body: JSON.stringify(requestBody)
       })
     }
 
     if (!res.ok) {
-      console.error(`${aiModel} API error:`, res.status)
+      const errorText = await res.text();
+      console.error(`${aiModel} API error:`, res.status);
+      console.error(`Error details:`, errorText);
       return ''
     }
 
@@ -179,9 +195,9 @@ ${context}`
 async function searchWithOpenAI(query: string, platform: string, searchResults: any[]): Promise<string> {
   console.log('\n===== OPENAI BACKUP SEARCH =====')
   
-  // 第一步: 使用gpt-4o-mini-search-preview进行网络搜索
+  // 第一步: 使用gpt-4o-search-preview-2025-03-11进行网络搜索
   try {
-    console.log('Step 1: Searching with gpt-4o-mini-search-preview...')
+    console.log('Step 1: Searching with gpt-4o-search-preview-2025-03-11...')
     const searchSystemPrompt = `You are a professional social media URL finder specialized in identifying official brand accounts.
 You can search the web to find official brand accounts.
 Your task is to find potential official account URLs for the specified brand on the specified platform.
@@ -213,7 +229,7 @@ Return ONLY the URLs (maximum 3), each on a new line, with no explanations.`
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini-search-preview',
+        model: 'gpt-4o-search-preview-2025-03-11',
         messages: [
           {
             role: 'system',
@@ -229,14 +245,16 @@ Return ONLY the URLs (maximum 3), each on a new line, with no explanations.`
     })
 
     if (!searchRes.ok) {
-      console.error('GPT-4o-mini-search-preview API error:', searchRes.status)
+      const errorText = await searchRes.text();
+      console.error('GPT-4o-search-preview API error:', searchRes.status);
+      console.error('Error details:', errorText);
       return ''
     }
     
     const searchData = await searchRes.json()
     const miniResults = searchData?.choices?.[0]?.message?.content?.trim() || ''
     
-    console.log('URLs found by gpt-4o-mini-search-preview:')
+    console.log('URLs found by gpt-4o-search-preview:')
     console.log(miniResults)
     
     // 提取Google搜索结果中的URL
@@ -251,7 +269,7 @@ Return ONLY the URLs (maximum 3), each on a new line, with no explanations.`
     // 合并两种来源的URL
     let allURLs: string[] = []
     
-    // 添加GPT-4o-mini找到的URL
+    // 添加GPT-4o-search-preview找到的URL
     if (miniResults && miniResults !== "No URLs found") {
       const miniURLs = miniResults.split('\n').filter((url: string) => url.trim() && url.startsWith('http'))
       allURLs = [...miniURLs]
@@ -273,8 +291,8 @@ Return ONLY the URLs (maximum 3), each on a new line, with no explanations.`
       return ''
     }
     
-    // 第二步: 再次使用gpt-4o-mini-search-preview验证和选择最佳URL
-    console.log('Step 2: Verifying URLs with gpt-4o-mini-search-preview...')
+    // 第二步: 再次使用gpt-4o-search-preview-2025-03-11验证和选择最佳URL
+    console.log('Step 2: Verifying URLs with gpt-4o-search-preview-2025-03-11...')
     const verifySystemPrompt = `You are a professional social media URL verification expert.
 Your task is to verify which ONE of the provided URLs is most likely to be the official account for the specified brand.
 
@@ -308,7 +326,7 @@ ${allURLs.join('\n')}`
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini-search-preview',
+        model: 'gpt-4o-search-preview-2025-03-11',
         messages: [
           {
             role: 'system',
@@ -324,7 +342,9 @@ ${allURLs.join('\n')}`
     })
 
     if (!verifyRes.ok) {
-      console.error('GPT-4o-mini-search-preview verification API error:', verifyRes.status)
+      const errorText = await verifyRes.text();
+      console.error('GPT-4o-search-preview verification API error:', verifyRes.status);
+      console.error('Error details:', errorText);
       return ''
     }
     
@@ -370,8 +390,8 @@ export async function POST(req: NextRequest) {
     // ===== 启动两个并行搜索 =====
     console.log('\n===== STARTING PARALLEL SEARCHES =====')
     
-    // 1. 启动GPT-4o-mini搜索 (异步)
-    console.log('\n----- STARTING GPT-4O-MINI SEARCH -----')
+    // 1. 启动GPT-4o搜索 (异步)
+    console.log('\n----- STARTING GPT-4O-SEARCH -----')
     const miniSearchPromise = searchWithMini(brand, platform)
     
     // 2. 同时启动Google+GPT搜索 (原有逻辑)
@@ -396,6 +416,17 @@ export async function POST(req: NextRequest) {
     let finalSearchResults = [];
     let found = false;
     
+    // 创建分析区域顺序，将用户选择的区域放在最前面
+    const analysisRegions = [...allRegions]; // 复制数组
+    // 如果用户选择的不是Global，则先移除用户区域再将其插入到最前面
+    if (region !== 'Global') {
+      const index = analysisRegions.indexOf(region);
+      if (index > -1) {
+        analysisRegions.splice(index, 1);
+      }
+      analysisRegions.unshift(region);
+    }
+
     // 外循环：Google搜索不同区域
     for (const searchRegion of searchRegions) {
       if (found) break; // 如果已找到URL，跳出循环
@@ -416,8 +447,7 @@ export async function POST(req: NextRequest) {
       }
       
       // 内循环：AI分析不同区域
-      // 对搜索结果，尝试用所有区域进行AI分析
-      for (const analysisRegion of allRegions) {
+      for (const analysisRegion of analysisRegions) {
         if (found) break; // 如果已找到URL，跳出循环
         
         console.log(`\n----- AI ANALYSIS: Region "${analysisRegion}" -----`)
@@ -441,9 +471,9 @@ export async function POST(req: NextRequest) {
     // ===== 等待两个搜索都完成 =====
     console.log('\n===== WAITING FOR ALL SEARCHES TO COMPLETE =====')
     
-    // 等待GPT-4o-mini搜索完成
+    // 等待GPT-4o搜索完成
     const miniURLs = await miniSearchPromise
-    console.log('GPT-4o-mini search completed')
+    console.log('GPT-4o search completed')
     
     // 仅使用Google+GPT搜索找到的URL，不从搜索结果中提取额外URL
     const googleURLs = url ? [url] : [];
@@ -451,7 +481,7 @@ export async function POST(req: NextRequest) {
     console.log('\n===== URL SEARCH RESULTS =====')
     console.log('URL from Google+GPT search:')
     console.log(googleURLs)
-    console.log('URLs from GPT-4o-mini search:')
+    console.log('URLs from GPT-4o search:')
     console.log(miniURLs)
 
     // 合并两种来源的URL
@@ -500,178 +530,117 @@ export async function POST(req: NextRequest) {
     })
   } catch (e: any) {
     console.error('❌ API Error:', e)
+    let errorMessage = e.message || 'Unknown error';
+    
+    // 捕获更详细的错误信息
+    if (e.response) {
+      try {
+        const errorData = await e.response.json();
+        console.error('API Error Response:', JSON.stringify(errorData, null, 2));
+        errorMessage = errorData.error?.message || errorMessage;
+      } catch (jsonError) {
+        console.error('Error parsing error response:', jsonError);
+      }
+    }
+    
     return NextResponse.json({ 
       success: false, 
-      error: e.message || 'Unknown error',
+      error: errorMessage,
       url: ''
     }, { status: 500 })
   }
 }
 
-// === 独立的GPT-4o-mini搜索函数 ===
+// === 独立的GPT-4o搜索函数 ===
 async function searchWithMini(brand: string, platform: string): Promise<string[]> {
-  console.log('Starting GPT-4o-mini search...')
+  console.log('Starting GPT-4o search via API function...')
   
   try {
-    const searchSystemPrompt = `You are a web search specialist focused on finding social media accounts.
-Your task is to search the web and find official social media accounts for the specified brand.
-
-For the search:
-1. Focus specifically on finding the brand's official account on the specified platform
-2. Use search queries that include the brand name, platform name, and terms like "official account"
-3. Look for verification badges, official websites linking to the account, or brand mentions
-
-When identifying official accounts, prioritize:
-1. Verified accounts (blue checkmark or platform verification)
-2. Account handles/names matching the brand name
-3. Accounts linked from the brand's official website
-4. Accounts with significant followers and professional content
-5. Accounts with regular posting activity related to the brand
-
-Return up to 3 most credible URLs (direct links to the profiles), each on a new line.
-Return ONLY the URLs - no explanations, prefixes, or other text.
-If you cannot find credible official accounts, return an empty string.`
-
-    const searchUserPrompt = `Brand: ${brand}
-Platform: ${platform}
-
-Search the web for this brand's official ${platform} account.
-Verify the authenticity of accounts before returning them.
-Return only the URLs (max 3), each on a separate line.`
+    // 直接调用集成API的处理函数而不是通过HTTP请求
+    const requestBody = {
+      query: brand,
+      task: 'social_accounts' as const,
+      platform,
+      region: 'Global',
+      options: {
+        maxResults: 3
+      }
+    };
     
-    const searchRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-search-preview',
-        messages: [
-          {
-            role: 'system',
-            content: searchSystemPrompt
-          },
-          {
-            role: 'user',
-            content: searchUserPrompt
-          }
-        ],
-        max_tokens: 2000
-      })
-    })
+    // 构造一个简化的NextRequest对象
+    const mockRequest = {
+      json: async () => requestBody
+    } as NextRequest;
 
-    if (!searchRes.ok) {
-      const errorText = await searchRes.text();
-      console.error('GPT-4o-mini-search-preview API error:', searchRes.status);
-      console.error('Error details:', errorText);
+    // 直接调用gpt4o_search的POST函数
+    const response = await gpt4oSearchModule.POST(mockRequest);
+    
+    // 解析JSON响应
+    const responseData = await response.json();
+    
+    if (!responseData.success) {
+      console.error('GPT-4o search API returned error:', responseData.error);
       return []
     }
     
-    const searchData = await searchRes.json()
-    const miniResults = searchData?.choices?.[0]?.message?.content?.trim() || ''
+    const urls = responseData.results || [];
     
-    console.log('Raw URLs found by gpt-4o-mini-search-preview:')
-    console.log(miniResults)
+    console.log('URLs found by GPT-4o-search:');
+    console.log(urls);
     
-    // 解析找到的URL
-    if (miniResults && miniResults !== "No URLs found") {
-      return miniResults.split('\n')
-        .map((url: string) => url.trim())
-        .filter((url: string) => url && url.startsWith('http'))
-    }
-    
-    return []
+    return urls;
   } catch (e) {
-    console.error('GPT-4o-mini search error:', e)
+    console.error('GPT-4o search error:', e);
     return []
   }
 }
 
 // === 最终URL验证函数 ===
 async function verifyBestURL(brand: string, platform: string, urls: string[]): Promise<string> {
-  console.log('Verifying best URL from combined results...')
+  console.log('Verifying best URL via API function...');
+  
+  // 如果没有URL可供验证，直接返回空字符串
+  if (!urls || urls.length === 0) {
+    console.log('No URLs to verify');
+    return '';
+  }
   
   try {
-    const verifySystemPrompt = `You are a social media verification specialist with access to the web.
-Your task is to determine which ONE URL from the provided list is most likely to be the OFFICIAL account for the brand.
-
-Verification process:
-1. ACTUALLY VISIT each URL and check the content - this is critical
-2. Ensure the account page loads properly and does NOT show errors like "This account doesn't exist", "Page not found", or "Account suspended"
-3. For valid pages, check for verification badges, follower counts, and content relevance
-4. Search the web for the brand's official website and check which social accounts they link to
-5. Consider username/handle relevance to the brand name
-6. Check for recent activity and engagement on the account
-
-CRITICAL INSTRUCTIONS:
-- You MUST actually open and view each URL to verify it exists and is active
-- IMMEDIATELY REJECT any URL that returns errors, doesn't load, or shows messages like "Account doesn't exist"
-- Only return a URL if you are at least 60% confident it is the official account AND the page loads properly
-- Not every brand has an official account on every platform - empty string is better than wrong URL
-- Many URLs may be fan pages, competitors, or unrelated content - be vigilant
-
-RESPONSE FORMAT:
-- If you find a valid, accessible URL with >60% confidence: Return ONLY that URL
-- If URLs don't load, show errors, or you're not confident: Return an empty string
-- Do not include ANY explanation or additional text - ONLY the URL or empty string`
-
-    const verifyUserPrompt = `Brand: ${brand}
-Platform: ${platform}
-
-VISIT and analyze each of these URLs to determine which ONE is most likely the official ${platform} account for ${brand}.
-IMPORTANT: Actively open each link and verify the page loads correctly without errors like "This account doesn't exist".
-Reject any URLs that don't load properly or show error messages.
-
-Only return a URL if:
-1. The page loads successfully (no errors or "account not found" messages)
-2. You are at least 60% confident it is the official account
-Otherwise, return an empty string.
-
-URLs to verify:
-${urls.join('\n')}`
+    // 直接调用集成API的处理函数而不是通过HTTP请求
+    const requestBody = {
+      query: brand,
+      task: 'verify_urls' as const, // 使用专门的URL验证任务
+      platform,
+      region: 'Global',
+      options: {
+        candidateUrls: urls // 传递候选URL列表给API
+      }
+    };
     
-    const verifyRes = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini-search-preview',
-        messages: [
-          {
-            role: 'system',
-            content: verifySystemPrompt
-          },
-          {
-            role: 'user',
-            content: verifyUserPrompt
-          }
-        ],
-        max_tokens: 2000
-      })
-    })
+    // 构造一个简化的NextRequest对象
+    const mockRequest = {
+      json: async () => requestBody
+    } as NextRequest;
 
-    if (!verifyRes.ok) {
-      const errorText = await verifyRes.text();
-      console.error('GPT-4o-mini-search-preview verification API error:', verifyRes.status);
-      console.error('Verification error details:', errorText);
-      return ''
+    // 直接调用gpt4o_search的POST函数
+    const response = await gpt4oSearchModule.POST(mockRequest);
+    
+    // 解析JSON响应
+    const responseData = await response.json();
+    
+    if (!responseData.success) {
+      console.error('URL verification API returned error:', responseData.error);
+      return '';
     }
     
-    const verifyData = await verifyRes.json()
-    let finalResult = verifyData?.choices?.[0]?.message?.content?.trim() || ''
+    // 应该只有一个或零个结果
+    const finalResult = responseData.results && responseData.results.length > 0 ? 
+      responseData.results[0] : '';
     
-    // 确保结果只包含URL
-    if (finalResult && !finalResult.startsWith('http')) {
-      finalResult = ''
-    }
-    
-    console.log('Verification result:', finalResult)
-    return finalResult
+    console.log('Verification result from API:', finalResult);
+    return finalResult;
   } catch (e) {
-    console.error('URL verification error:', e)
-    return ''
+    console.error('URL verification error:', e);
+    return '';
   }
 }

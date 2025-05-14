@@ -222,29 +222,102 @@ export default function SimpleModePage() {
   // Single retry
   const handleRetry = async (item: Item, index: number) => {
     console.log(`Starting retry for ${item.name} on ${item.platform}, index: ${index}, item ID: ${item.id}`);
-    setRetryingIndices((prev) => [...prev, index])
+    setRetryingIndices((prev) => [...prev, index]);
+    
     try {
       toast.success(`Request submitted, processing...`);
+      
+      // 立即清空显示的URL和follower数据
+      updateItemWithUrlAndFollowers(item.id, "", null, false);
+      
+      // ===== 第一步：使用google-gpt API重新获取URL =====
+      console.log(`Step 1: Retry extracting URL for ${item.name} on ${item.platform} using google-gpt`);
+      
+      // 调用google-gpt API重新获取URL
+      const urlRes = await fetch('/api/google-gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          brand: item.name,
+          platform: item.platform,
+          region: 'Global'
+        }),
+      });
+      
+      if (!urlRes.ok) {
+        const errorText = await urlRes.text();
+        throw new Error(`URL extraction (google-gpt) failed: ${errorText}`);
+      }
+      
+      const urlJson = await urlRes.json();
+      const newUrl = urlJson.url || null; // 确保没有URL时为null
+      
+      // 保存调试信息
+      setDebugResponses((prev) => [
+        ...prev,
+        { step: `${item.platform}-retry-url-extraction-google-gpt`, data: urlJson },
+      ]);
+      
+      if (!newUrl) {
+        console.warn(`No URL found for ${item.name} on ${item.platform}`);
+        toast.error(`No ${item.platform} link found for ${item.name}`);
+        // 如果没找到URL，不使用旧URL，保持为null
+        setRetryingIndices((prev) => prev.filter((i) => i !== index));
+        return; // 提前退出函数
+      }
+      
+      // 如果URL发生变化，记录日志并立即更新前端显示
+      if (newUrl && newUrl !== item.url) {
+        console.log(`URL updated from "${item.url}" to "${newUrl}"`);
+        toast.success(`URL updated: ${newUrl}`);
+        
+        // URL获取成功后立即更新前端显示
+        updateItemWithUrlAndFollowers(item.id, newUrl, null, false);
+        
+        // 更新数据库中的URL
+        try {
+          const updateUrlRes = await fetch('/api/simple-mode/update-competitor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              search_id: searchId,
+              competitor_name: item.name,
+              platform: item.platform,
+              url: newUrl
+            }),
+          });
+          
+          if (!updateUrlRes.ok) {
+            console.error(`Failed to update URL in database: ${await updateUrlRes.text()}`);
+          }
+        } catch (urlUpdateErr) {
+          console.error("Error updating URL in database:", urlUpdateErr);
+        }
+      }
+      
+      // ===== 第二步：使用平台特定API获取粉丝数据 =====
+      console.log(`Step 2: Getting follower data for ${item.name} using URL: ${newUrl}`);
+      toast.success(`Getting follower data for ${item.name}...`);
       
       // Depending on platform type, select different API endpoints and request parameters
       let apiEndpoint = '';
       let requestBody = {};
       
       if (item.platform === 'youtube') {
-        console.log(`Processing YouTube retry for ${item.name}, URL: ${item.url}`);
+        console.log(`Processing YouTube retry for ${item.name}, URL: ${newUrl}`);
         apiEndpoint = '/api/apify/youtube';
         requestBody = { 
           maxResultStreams: 0,
           maxResults: 1,
           maxResultsShorts: 0,
           sortVideosBy: "POPULAR",
-          startUrls: [{ url: item.url, method: "GET" }]
+          startUrls: [{ url: newUrl, method: "GET" }]
         };
       } else if (item.platform === 'tiktok') {
         apiEndpoint = '/api/apify/tiktok';
         requestBody = {
           excludePinnedPosts: false,
-          profiles: [item.url],
+          profiles: [newUrl],
           resultsPerPage: 1,
           shouldDownloadAvatars: false,
           shouldDownloadCovers: true,
@@ -257,19 +330,19 @@ export default function SimpleModePage() {
       } else if (item.platform === 'instagram') {
         apiEndpoint = '/api/apify/instagram';
         requestBody = {
-          usernames: [item.url]
+          usernames: [newUrl]
         };
       } else if (item.platform === 'linkedin') {
         apiEndpoint = '/api/apify/linkedin';
         requestBody = {
-          identifier: [item.url]
+          identifier: [newUrl]
         };
       } else if (item.platform === 'twitter') {
         apiEndpoint = '/api/apify/twitter';
         requestBody = {
           maxItems: 1,
           sort: "Latest",
-          startUrls: [item.url]
+          startUrls: [newUrl]
         };
       } else {
         throw new Error(`Platform ${item.platform} does not support retry operation`);
@@ -285,7 +358,11 @@ export default function SimpleModePage() {
       
       if (!retryRes.ok) {
         const errorText = await retryRes.text();
-        throw new Error(`Request failed: ${errorText}`);
+        console.error(`Follower data request failed: ${errorText}`);
+        toast.error(`Failed to get follower data, but URL has been updated`);
+        // 即使获取粉丝数据失败，也保持URL更新
+        setRetryingIndices((prev) => prev.filter((i) => i !== index));
+        return;
       }
       
       const resultData = await retryRes.json();
@@ -374,14 +451,6 @@ export default function SimpleModePage() {
           // Found valid data, update database
           console.log(`Valid fan count found: ${fans_count}. Updating database...`);
           
-          // Make a copy of the item with updated values for database update
-          const updatedItem = {
-            ...item,
-            fans_count,
-            followers: fans_count,
-            success: fans_count > 200
-          };
-          
           const updateRes = await fetch('/api/simple-mode/update-competitor', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -389,7 +458,7 @@ export default function SimpleModePage() {
               search_id: searchId,
               competitor_name: item.name,
               platform: item.platform,
-              url: item.url,
+              url: newUrl,
               fans_count: fans_count,
               dataset: JSON.stringify(resultData)
             }),
@@ -404,13 +473,14 @@ export default function SimpleModePage() {
           const updateJson = await updateRes.json();
           console.log(`Database update response:`, updateJson);
           
-          // Update front-end state
+          // Update front-end state with follower count (URL已经更新)
           const isSuccess = fans_count > 200;
-          console.log(`Updating frontend state with fans_count=${fans_count}, isSuccess=${isSuccess}`);
+          console.log(`Updating frontend state with URL=${newUrl}, fans_count=${fans_count}, isSuccess=${isSuccess}`);
           
+          // 更新本地item状态，更新粉丝数
           // Force re-render with a timeout to ensure state is updated
           setTimeout(() => {
-            updateItemInState(item.id || `${item.name}-${item.platform}`, fans_count, isSuccess);
+            updateItemWithUrlAndFollowers(item.id, newUrl, fans_count, isSuccess);
           }, 50);
           
           if (isSuccess) {
@@ -420,7 +490,7 @@ export default function SimpleModePage() {
           }
         } else {
           console.error(`Could not extract follower count from results for ${item.platform}`);
-          toast.error(`Could not extract follower count from results`);
+          toast.error(`Failed to get follower data, but URL has been updated`);
         }
       } catch (err) {
         console.error(`Failed to process ${item.platform} data:`, err);
@@ -433,14 +503,14 @@ export default function SimpleModePage() {
     } catch (e: any) {
       console.error(`Retry request failed:`, e);
       toast.error('Retry request failed: ' + e.message);
-      // If request fails, restore button status
+      // If request fails, restore button status but保持数据为空
       setRetryingIndices((prev) => prev.filter((i) => i !== index));
     }
   }
   
-  // Helper function: Update item data in state
-  const updateItemInState = (itemId: string, fans_count: number, isSuccess: boolean) => {
-    console.log(`Updating item in state: itemId=${itemId}, fans_count=${fans_count}, isSuccess=${isSuccess}`);
+  // Helper function: Update both URL and follower data in state
+  const updateItemWithUrlAndFollowers = (itemId: string, url: string, fans_count: number | null, isSuccess: boolean) => {
+    console.log(`Updating item with URL and followers: itemId=${itemId}, url=${url}, fans_count=${fans_count}, isSuccess=${isSuccess}`);
     
     // Update local state
     setItems(prevItems => {
@@ -453,6 +523,7 @@ export default function SimpleModePage() {
           console.log(`Found matching item to update, before:`, prevItem);
           const updated = { 
             ...prevItem, 
+            url: url,
             followers: fans_count, 
             fans_count: fans_count, 
             success: isSuccess 
@@ -485,6 +556,7 @@ export default function SimpleModePage() {
         console.log(`Updating incompleteItems at index ${indexToUpdate}`);
         newArray[indexToUpdate] = { 
           ...newArray[indexToUpdate], 
+          url: url,
           followers: fans_count, 
           fans_count: fans_count, 
           success: isSuccess
@@ -590,9 +662,9 @@ export default function SimpleModePage() {
         throw new Error('Failed to update database');
       }
       
-      // Update front-end state
+      // Update front-end state - 使用updateItemWithUrlAndFollowers代替updateItemInState
       const isSuccess = fans_count > 200;
-      updateItemInState(item.id, fans_count, isSuccess);
+      updateItemWithUrlAndFollowers(item.id, editingUrl, fans_count, isSuccess);
       
       // Exit edit mode
       setEditingIndex(null);
@@ -742,7 +814,46 @@ export default function SimpleModePage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: it.name, platform: it.platform, searchId: id }),
         })
-        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string; id: string }
+        const urlJson = (await urlRes.json()) as { name: string; platform: string; url: string; id: string; debug?: any }
+        
+        // 保存调试信息
+        if (urlJson.debug) {
+          setDebugResponses((prev) => [
+            ...prev,
+            { 
+              step: `extract-url-debug-${it.name}-${it.platform}`, 
+              data: {
+                ...urlJson.debug,
+                name: it.name,
+                platform: it.platform
+              } 
+            },
+          ]);
+          
+          // 如果有原始结果，单独记录以便清晰显示
+          if (urlJson.debug.rawResults) {
+            if (urlJson.debug.rawResults.social_accounts) {
+              setDebugResponses((prev) => [
+                ...prev,
+                { 
+                  step: `${it.platform}-social-accounts-raw`, 
+                  data: urlJson.debug.rawResults.social_accounts
+                },
+              ]);
+            }
+            
+            if (urlJson.debug.rawResults.verify_urls) {
+              setDebugResponses((prev) => [
+                ...prev,
+                { 
+                  step: `${it.platform}-verify-urls-raw`, 
+                  data: urlJson.debug.rawResults.verify_urls
+                },
+              ]);
+            }
+          }
+        }
+        
         itemsWithUrl.push({ ...it, url: urlJson.url, id: urlJson.id })
       }
       setItems(itemsWithUrl)
@@ -781,6 +892,76 @@ export default function SimpleModePage() {
       toast.error('Error: ' + err.message)
     }
   }
+
+  // 在显示无效数据后启动自动更新机制
+  useEffect(() => {
+    if (incompleteItems.length > 0 && searchId) {
+      // 设置定时器，每30秒检查一次数据库更新
+      const intervalId = setInterval(async () => {
+        try {
+          // 重新获取当前数据
+          const res = await fetch('/api/simple-mode/get-competitor-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ searchId })
+          });
+          
+          if (!res.ok) {
+            throw new Error('Failed to get updated data');
+          }
+          
+          const data = await res.json();
+          
+          // 检查之前无效的条目是否现在有了有效数据
+          let updatedCount = 0;
+          
+          // 创建新的incompleteItems数组，移除已有有效数据的项
+          const stillIncomplete = incompleteItems.filter(oldItem => {
+            // 在新数据中查找对应项
+            const updatedItem = data.items.find((item: Item) => item.id === oldItem.id);
+            
+            if (updatedItem) {
+              const followers = updatedItem.followers || updatedItem.fans_count;
+              const nowValid = followers !== undefined && followers !== null && followers > 200;
+              
+              if (nowValid) {
+                // 找到了更新，此项已有效
+                updatedCount++;
+                
+                // 更新本地状态 - 使用数据库中的新URL和新的粉丝数据
+                const newUrl = updatedItem.url || ""; // 使用数据库中的URL
+                updateItemWithUrlAndFollowers(oldItem.id, newUrl, followers, true);
+                console.log(`Auto-updating item: ID=${oldItem.id}, new URL=${newUrl}, new followers=${followers}`);
+                return false; // 从无效列表中移除
+              }
+            }
+            
+            return true; // 保留在无效列表中
+          });
+          
+          if (updatedCount > 0) {
+            console.log(`Auto-update: Found ${updatedCount} items with new valid data`);
+            toast.success(`Found ${updatedCount} new valid items`);
+            
+            // 更新无效列表
+            setIncompleteItems(stillIncomplete);
+            
+            // 如果所有项都有效了，可以继续流程
+            if (stillIncomplete.length === 0) {
+              clearInterval(intervalId);
+              handleGenerateEmailAfterScraping();
+            }
+          }
+          
+        } catch (e) {
+          console.error('Auto-update check failed:', e);
+        }
+      }, 30000); // 30秒检查一次
+      
+      // 清理函数
+      return () => clearInterval(intervalId);
+    }
+  }, [incompleteItems, searchId]);
 
   return (
     <div className="container" style={{ position: 'relative' }}>
@@ -1162,27 +1343,102 @@ export default function SimpleModePage() {
 
       {/* Debug Responses */}
       <div className="card">
-        <h3>Debug Responses</h3>
+        <h3>调试信息</h3>
         <div
           ref={debugContainerRef}
           style={{
             background: 'black',
             color: '#39FF14',
             padding: '8px',
-            height: '200px',
+            height: '300px', // 增加高度
             overflowY: 'auto',
             fontFamily: 'monospace',
             resize: 'vertical'
           }}
         >
           {debugResponses.map((dbg, idx) => (
-            <div key={idx} style={{ marginBottom: '12px' }}>
-              <strong>{dbg.step}:</strong>
-              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                {JSON.stringify(dbg.data, null, 2)}
-              </pre>
+            <div key={idx} style={{ 
+              marginBottom: '12px',
+              borderBottom: '1px solid #333',
+              paddingBottom: '8px'
+            }}>
+              {/* 根据不同类型的日志使用不同的样式 */}
+              {dbg.step.includes('social-accounts-raw') ? (
+                <div>
+                  <strong style={{ color: '#FF9966' }}>{dbg.step}:</strong>
+                  <pre style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    margin: 0,
+                    background: '#111',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    color: '#66CCFF' // 蓝色显示URL
+                  }}>
+                    {Array.isArray(dbg.data) 
+                      ? dbg.data.map((url, i) => `[${i+1}] ${url}`).join('\n') 
+                      : JSON.stringify(dbg.data, null, 2)}
+                  </pre>
+                </div>
+              ) : dbg.step.includes('verify-urls-raw') ? (
+                <div>
+                  <strong style={{ color: '#FFCC00' }}>{dbg.step}:</strong>
+                  <pre style={{ 
+                    whiteSpace: 'pre-wrap', 
+                    margin: 0,
+                    background: '#111',
+                    padding: '8px',
+                    borderRadius: '4px',
+                    color: '#66FF99' // 绿色显示验证URL
+                  }}>
+                    {Array.isArray(dbg.data) 
+                      ? dbg.data.map((url, i) => `[${i+1}] ${url}`).join('\n') 
+                      : JSON.stringify(dbg.data, null, 2)}
+                  </pre>
+                </div>
+              ) : dbg.step.includes('extract-url-debug') ? (
+                <div>
+                  <strong style={{ color: '#CC99FF' }}>{dbg.step}:</strong>
+                  {dbg.data.steps && (
+                    <div style={{ marginLeft: '16px', color: '#CCCCCC' }}>
+                      {dbg.data.steps.map((step: string, i: number) => (
+                        <div key={i} style={{ marginBottom: '4px' }}>• {step}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div>
+                  <strong>{dbg.step}:</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                    {JSON.stringify(dbg.data, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
           ))}
+        </div>
+        
+        {/* 添加刷新按钮 */}
+        <div style={{ marginTop: '8px', display: 'flex', justifyContent: 'space-between' }}>
+          <button 
+            onClick={() => {
+              setDebugResponses([]);
+            }}
+            style={{
+              padding: '4px 8px',
+              background: '#333',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer'
+            }}
+          >
+            清除日志
+          </button>
+          
+          <span style={{ fontSize: '12px', color: '#666' }}>
+            总计 {debugResponses.length} 条日志
+          </span>
         </div>
       </div>
     </div>

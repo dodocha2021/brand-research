@@ -15,6 +15,10 @@ export default function CompetitorScrapePage() {
   const [showEditorButtons, setShowEditorButtons] = useState(false)
   const [editedRows, setEditedRows] = useState<any[]>([])
   const [rowLoading, setRowLoading] = useState<{ [id: string]: boolean }>({})
+  const [polling, setPolling] = useState(false)
+  const [pollingCount, setPollingCount] = useState(0)
+  const [rowTimeouts, setRowTimeouts] = useState<{ [id: string]: NodeJS.Timeout }>({})
+  const [errorMessages, setErrorMessages] = useState<{ [id: string]: string }>({})
 
   useEffect(() => {
     if (!idsParam) return
@@ -33,134 +37,144 @@ export default function CompetitorScrapePage() {
     fetchRows()
   }, [idsParam])
 
+  useEffect(() => {
+    const hasScrapingItems = rows.some(row => row.status === 'scraping')
+    
+    if (hasScrapingItems && !polling) {
+      setPolling(true)
+      setPollingCount(0)
+    }
+    
+    if (!hasScrapingItems && polling) {
+      setPolling(false)
+      setLoading(false)
+      setRowLoading({})
+      Object.values(rowTimeouts).forEach(timeoutId => clearTimeout(timeoutId as NodeJS.Timeout));
+      setRowTimeouts({});
+    }
+    
+    let pollInterval: NodeJS.Timeout | null = null
+    
+    if (polling) {
+      pollInterval = setInterval(async () => {
+        setPollingCount(prev => prev + 1)
+        
+        const scrapingIds = rows
+          .filter(row => row.status === 'scraping')
+          .map(row => row.id)
+        
+        if (scrapingIds.length === 0) {
+          setPolling(false)
+          return
+        }
+        
+        try {
+          const { data: updatedData, error } = await supabase
+            .from('competitor_search_history')
+            .select('*')
+            .in('id', scrapingIds)
+            
+          if (error) {
+            console.error('轮询更新失败:', error)
+            return
+          }
+          
+          if (updatedData && updatedData.length > 0) {
+            let hasUpdates = false;
+            
+            setRows(prev => prev.map(row => {
+              const updated = updatedData.find(item => item.id === row.id)
+              if (updated) {
+                if (updated.followers !== row.followers || 
+                    updated.total_views !== row.total_views || 
+                    updated.dataset !== row.dataset) {
+                  
+                  hasUpdates = true;
+                  
+                  if (rowTimeouts[row.id]) {
+                    clearTimeout(rowTimeouts[row.id]);
+                    setRowTimeouts(prev => {
+                      const newTimeouts = {...prev};
+                      delete newTimeouts[row.id];
+                      return newTimeouts;
+                    });
+                  }
+                  
+                  setRowLoading(prev => ({ ...prev, [row.id]: false }));
+                  
+                  return {
+                    ...row,
+                    followers: updated.followers || row.followers,
+                    logo: updated.logo || row.logo,
+                    total_views: updated.total_views || row.total_views,
+                    dataset: updated.dataset || row.dataset,
+                    status: null
+                  }
+                }
+              }
+              return row
+            }))
+            
+            if (hasUpdates) {
+              console.log(`轮询更新: 第${pollingCount}次，检测到数据更新，已重置相关行的状态`)
+            } else {
+              console.log(`轮询更新: 第${pollingCount}次，未检测到数据变化`)
+            }
+          }
+        } catch (e) {
+          console.error('轮询更新出错:', e)
+        }
+      }, 5000)
+    }
+    
+    return () => {
+      if (pollInterval) clearInterval(pollInterval)
+    }
+  }, [rows, polling, pollingCount, rowTimeouts])
+
   const handleScrape = async (data: any[]) => {
     setLoading(true)
+    setTimeout(() => {
+      console.log('批量抓取任务超时，重置状态');
+      setRows(prevRows => prevRows.map(r => 
+        r.status === 'scraping' ? { ...r, status: null } : r
+      ));
+      setLoading(false);
+    }, 3 * 60 * 1000); // 3分钟超时
+    
     try {
-      const newRows = await Promise.all(data.map(async (row) => {
-        if (row.platform === 'instagram') {
-          try {
-            const res = await fetch('/api/apify/instagram', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ usernames: [row.competitor_url] })
+      for (const row of data) {
+        try {
+          console.log(`准备抓取: ID=${row.id}, URL=${row.competitor_url}, 平台=${row.platform}`);
+          console.log(`完整的行数据:`, JSON.stringify(row));
+          
+          setRows(prevRows => 
+            prevRows.map(r => r.id === row.id ? { ...r, status: 'scraping' } : r)
+          )
+          
+          const res = await fetch('/api/apify/start-scrape', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              url: row.competitor_url,
+              platform: row.platform,
+              competitorId: row.id
             })
-            const result = await res.json()
-            const info = Array.isArray(result) ? result[0] : null
-            return {
-              ...row,
-              logo: info?.profilePicUrl || '',
-              followers: info?.followersCount ?? ''
-            }
-          } catch (e) {
-            return { ...row }
+          })
+          
+          const result = await res.json()
+          
+          if (result.success) {
+            console.log(`抓取任务已启动: ID=${row.id}, actorRunId=${result.actorRunId}, 平台=${row.platform}`)
+          } else {
+            console.error(`启动抓取任务失败: ID=${row.id}, 平台=${row.platform}, 错误:`, result.message)
           }
-        } else if (row.platform === 'linkedin') {
-          try {
-            const res = await fetch('/api/apify/linkedin', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ identifier: row.competitor_url })
-            })
-            const result = await res.json()
-            const info = Array.isArray(result) ? result[0] : null
-            return {
-              ...row,
-              logo: info?.media?.logo_url || '',
-              followers: info?.stats?.follower_count ?? ''
-            }
-          } catch (e) {
-            return { ...row }
-          }
-        } else if (row.platform === 'tiktok') {
-          try {
-            const res = await fetch('/api/apify/tiktok', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                excludePinnedPosts: false,
-                profiles: [row.competitor_url],
-                resultsPerPage: 1,
-                shouldDownloadAvatars: false,
-                shouldDownloadCovers: true,
-                shouldDownloadSlideshowImages: false,
-                shouldDownloadSubtitles: false,
-                shouldDownloadVideos: false,
-                profileScrapeSections: ['videos'],
-                profileSorting: 'latest'
-              })
-            })
-            const result = await res.json()
-            const info = Array.isArray(result) ? result[0] : null
-            return {
-              ...row,
-              logo: info?.authorMeta?.avatar || '',
-              followers: info?.authorMeta?.fans ?? ''
-            }
-          } catch (e) {
-            return { ...row }
-          }
-        } else if (row.platform === 'twitter') {
-          try {
-            const res = await fetch('/api/apify/twitter', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                maxItems: 1,
-                sort: 'Latest',
-                startUrls: [row.competitor_url]
-              })
-            })
-            const result = await res.json()
-            const info = Array.isArray(result) ? result[0] : null
-            return {
-              ...row,
-              logo: info?.author?.profilePicture || '',
-              followers: info?.author?.followers ?? ''
-            }
-          } catch (e) {
-            return { ...row }
-          }
-        } else if (row.platform === 'youtube') {
-          try {
-            const res = await fetch('/api/apify/youtube', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                maxResultStreams: 1,
-                maxResults: 1,
-                maxResultsShorts: 1,
-                sortVideosBy: 'POPULAR',
-                startUrls: [
-                  {
-                    url: row.competitor_url,
-                    method: 'GET'
-                  }
-                ]
-              })
-            })
-            const result = await res.json()
-            console.log('YouTube API 前端响应:', JSON.stringify(result))
-            
-            const info = Array.isArray(result) ? result[0] : result
-            console.log('处理后的info对象:', JSON.stringify(info))
-            
-            return {
-              ...row,
-              logo: info?.aboutChannelInfo?.channelAvatarUrl || '',
-              followers: info?.aboutChannelInfo?.numberOfSubscribers ?? '',
-              channelTotalViews: info?.aboutChannelInfo?.channelTotalViews ?? ''
-            }
-          } catch (e) {
-            return { ...row }
-          }
+        } catch (error) {
+          console.error(`启动抓取任务异常: ID=${row.id}, 平台=${row.platform}, 错误:`, error)
         }
-        return { ...row }
-      }))
-      setRows(newRows)
+      }
     } catch (error) {
-      console.error('Scraping error:', error)
-    } finally {
-      setLoading(false)
+      console.error('批量抓取出错:', error)
     }
   }
 
@@ -176,6 +190,7 @@ export default function CompetitorScrapePage() {
           competitor_url: row.competitor_url,
           logo: row.logo,
           followers: row.followers,
+          total_views: row.platform === 'youtube' ? (row.total_views || row.channelTotalViews) : null,
           // 其它你想同步的字段也可以加上
         })
         .eq('id', row.id)
@@ -193,116 +208,163 @@ export default function CompetitorScrapePage() {
 
   // 单行刷新逻辑
   const handleRefreshRow = async (row: any, idx: number) => {
+    // 先设置按钮为加载状态 - 锁住按钮
     setRowLoading(prev => ({ ...prev, [row.id]: true }))
-    let updatedRow = { ...row }
-    try {
-      if (row.platform === 'instagram') {
-        const res = await fetch('/api/apify/instagram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usernames: [row.competitor_url] })
-        })
-        const result = await res.json()
-        const info = Array.isArray(result) ? result[0] : null
-        updatedRow.logo = info?.profilePicUrl || ''
-        updatedRow.followers = info?.followersCount ?? ''
-      } else if (row.platform === 'linkedin') {
-        const res = await fetch('/api/apify/linkedin', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier: row.competitor_url })
-        })
-        const result = await res.json()
-        const info = Array.isArray(result) ? result[0] : null
-        updatedRow.logo = info?.media?.logo_url || ''
-        updatedRow.followers = info?.stats?.follower_count ?? ''
-      } else if (row.platform === 'tiktok') {
-        const res = await fetch('/api/apify/tiktok', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            excludePinnedPosts: false,
-            profiles: [row.competitor_url],
-            resultsPerPage: 1,
-            shouldDownloadAvatars: false,
-            shouldDownloadCovers: true,
-            shouldDownloadSlideshowImages: false,
-            shouldDownloadSubtitles: false,
-            shouldDownloadVideos: false,
-            profileScrapeSections: ['videos'],
-            profileSorting: 'latest'
-          })
-        })
-        const result = await res.json()
-        const info = Array.isArray(result) ? result[0] : null
-        updatedRow.logo = info?.authorMeta?.avatar || ''
-        updatedRow.followers = info?.authorMeta?.fans ?? ''
-      } else if (row.platform === 'twitter') {
-        const res = await fetch('/api/apify/twitter', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            maxItems: 1,
-            sort: 'Latest',
-            startUrls: [row.competitor_url]
-          })
-        })
-        const result = await res.json()
-        const info = Array.isArray(result) ? result[0] : null
-        updatedRow.logo = info?.author?.profilePicture || ''
-        updatedRow.followers = info?.author?.followers ?? ''
-      } else if (row.platform === 'youtube') {
-        const res = await fetch('/api/apify/youtube', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            maxResultStreams: 1,
-            maxResults: 1,
-            maxResultsShorts: 1,
-            sortVideosBy: 'POPULAR',
-            startUrls: [
-              {
-                url: row.competitor_url,
-                method: 'GET'
-              }
-            ]
-          })
-        })
-        const result = await res.json()
-        console.log('YouTube API 前端响应:', JSON.stringify(result))
-        
-        const info = Array.isArray(result) ? result[0] : result
-        console.log('处理后的info对象:', JSON.stringify(info))
-        
-        updatedRow.logo = info?.aboutChannelInfo?.channelAvatarUrl || ''
-        updatedRow.followers = info?.aboutChannelInfo?.numberOfSubscribers ?? ''
-        updatedRow.channelTotalViews = info?.aboutChannelInfo?.channelTotalViews ?? ''
-        
-        // 记录更新后的数据
-        console.log('更新后的followers值:', updatedRow.followers)
-      }
-      // 更新本地rows
-      console.log('即将更新本地rows, 更新的行:', JSON.stringify(updatedRow))
-      setRows(prevRows => prevRows.map((r, i) => (i === idx ? { 
+    
+    // 清除可能存在的错误消息
+    setErrorMessages(prev => {
+      const newMessages = {...prev};
+      delete newMessages[row.id];
+      return newMessages;
+    });
+    
+    // 清空当前行的URL、followers和total_views数据
+    setRows(prevRows => prevRows.map((r, i) => 
+      i === idx ? { 
         ...r, 
-        logo: updatedRow.logo, 
-        followers: updatedRow.followers,
-        channelTotalViews: updatedRow.channelTotalViews 
-      } : r)))
-      // 同步到 supabase
-      console.log('即将同步到supabase, id:', row.id, '数据:', JSON.stringify({logo: updatedRow.logo, followers: updatedRow.followers}))
-      await supabase
-        .from('competitor_search_history')
-        .update({
-          logo: updatedRow.logo,
-          followers: updatedRow.followers
+        status: 'scraping',
+        competitor_url: '', // 清空URL
+        followers: null,    // 清空followers
+        total_views: null   // 清空total_views
+      } : r
+    ));
+    
+    // 设置3分钟超时
+    const timeoutId = setTimeout(() => {
+      console.log(`ID=${row.id}的抓取任务超时，重置状态`);
+      setRows(prevRows => prevRows.map((r, i) => 
+        r.id === row.id ? { ...r, status: null } : r
+      ));
+      setRowLoading(prev => ({ ...prev, [row.id]: false }));
+      setErrorMessages(prev => ({...prev, [row.id]: "Request timeout"}));
+      
+      // 清除超时标记
+      setRowTimeouts(prev => {
+        const newTimeouts = {...prev};
+        delete newTimeouts[row.id];
+        return newTimeouts;
+      });
+    }, 3 * 60 * 1000); // 3分钟超时
+    
+    // 保存超时标记
+    setRowTimeouts(prev => ({...prev, [row.id]: timeoutId}));
+    
+    try {
+      console.log(`准备刷新单行: ID=${row.id}, 品牌=${row.competitor_name}, 平台=${row.platform}`);
+      
+      // 第1步：调用google-gpt API查询品牌URL
+      console.log(`调用google-gpt API查询${row.competitor_name}的${row.platform}账号URL`);
+      
+      const gptResponse = await fetch('/api/google-gpt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand: row.competitor_name,
+          platform: row.platform,
+          region: row.region || 'global'
         })
-        .eq('id', row.id)
+      });
+      
+      if (!gptResponse.ok) {
+        throw new Error(`Google GPT API请求失败: ${gptResponse.status} ${gptResponse.statusText}`);
+      }
+      
+      const gptData = await gptResponse.json();
+      const newUrl = gptData?.url || '';
+      
+      console.log(`Google GPT返回的URL: ${newUrl}`);
+      
+      // 检查是否找到URL
+      if (!newUrl) {
+        console.error(`未找到${row.competitor_name}的${row.platform}官方账号URL`);
+        
+        // 设置错误消息并恢复按钮状态
+        setErrorMessages(prev => ({...prev, [row.id]: "No official account found"}));
+        
+        // 清除超时
+        clearTimeout(timeoutId);
+        setRowTimeouts(prev => {
+          const newTimeouts = {...prev};
+          delete newTimeouts[row.id];
+          return newTimeouts;
+        });
+        
+        // 恢复行状态但保持URL等为空
+        setRows(prevRows => prevRows.map((r, i) => 
+          i === idx ? { ...r, status: null } : r
+        ));
+        
+        // 恢复按钮状态
+        setRowLoading(prev => ({ ...prev, [row.id]: false }));
+        
+        return;
+      }
+      
+      // 更新URL到行中
+      setRows(prevRows => prevRows.map((r, i) => 
+        i === idx ? { ...r, competitor_url: newUrl } : r
+      ));
+      
+      // 第2步：调用start-scrape API开始抓取任务
+      console.log(`找到URL，调用start-scrape API开始抓取: URL=${newUrl}`);
+      
+      const res = await fetch('/api/apify/start-scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          url: newUrl,
+          platform: row.platform,
+          competitorId: row.id
+        })
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        console.log(`单行抓取任务已启动: ID=${row.id}, actorRunId=${result.actorRunId}, 平台=${row.platform}`);
+      } else {
+        console.error(`单行抓取任务失败: ID=${row.id}, 平台=${row.platform}, 错误:`, result.message);
+        
+        // 设置错误消息
+        setErrorMessages(prev => ({...prev, [row.id]: result.message || "Failed to start scraping"}));
+        
+        // 清除超时
+        clearTimeout(timeoutId);
+        setRowTimeouts(prev => {
+          const newTimeouts = {...prev};
+          delete newTimeouts[row.id];
+          return newTimeouts;
+        });
+        
+        // 恢复行状态
+        setRows(prevRows => prevRows.map((r, i) => 
+          i === idx ? { ...r, status: null } : r
+        ));
+        
+        // 恢复按钮状态
+        setRowLoading(prev => ({ ...prev, [row.id]: false }));
+      }
     } catch (e) {
-      // 可选：错误提示
-      console.error('单行刷新失败', e)
-    } finally {
-      setRowLoading(prev => ({ ...prev, [row.id]: false }))
+      console.error(`刷新流程失败: ID=${row.id}, 错误:`, e);
+      
+      // 设置错误消息
+      setErrorMessages(prev => ({...prev, [row.id]: e instanceof Error ? e.message : "Unknown error"}));
+      
+      // 清除超时
+      clearTimeout(timeoutId);
+      setRowTimeouts(prev => {
+        const newTimeouts = {...prev};
+        delete newTimeouts[row.id];
+        return newTimeouts;
+      });
+      
+      // 恢复行状态
+      setRows(prevRows => prevRows.map((r, i) => 
+        i === idx ? { ...r, status: null } : r
+      ));
+      
+      // 恢复按钮状态
+      setRowLoading(prev => ({ ...prev, [row.id]: false }));
     }
   }
 
@@ -325,7 +387,6 @@ export default function CompetitorScrapePage() {
             <tr>
               <th>Competitor Name</th>
               <th>Platform</th>
-              <th>Logo</th>
               <th>URL</th>
               <th>Followers</th>
               <th>Channel Total Views</th>
@@ -348,24 +409,6 @@ export default function CompetitorScrapePage() {
                   />
                 </td>
                 <td>
-                  {editMode ? (
-                    <input
-                      value={row.logo || ''}
-                      placeholder="Enter logo URL"
-                      onChange={e => {
-                        const newRows = [...editedRows]
-                        newRows[idx].logo = e.target.value
-                        setEditedRows(newRows)
-                      }}
-                    />
-                  ) : (
-                    <input
-                      value={row.logo || ''}
-                      disabled
-                    />
-                  )}
-                </td>
-                <td>
                   <input
                     value={row.competitor_url || ''}
                     disabled
@@ -383,28 +426,48 @@ export default function CompetitorScrapePage() {
                       }}
                     />
                   ) : (
-                    <input
-                      value={row.followers !== undefined && row.followers !== null && row.followers !== '' ? row.followers : ''}
-                      disabled
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        value={row.followers !== undefined && row.followers !== null && row.followers !== '' ? row.followers : ''}
+                        disabled
+                      />
+                    </div>
                   )}
                 </td>
                 <td>
                   <input
-                    value={row.platform === 'youtube' ? (row.channelTotalViews || '') : ''}
+                    value={row.platform === 'youtube' ? (row.total_views || row.channelTotalViews || '') : ''}
                     disabled
-                    style={{ color: row.platform === 'youtube' ? 'inherit' : '#a0a0a0' }}
                   />
                 </td>
                 <td style={{ textAlign: 'center' }}>
-                  <button
-                    title="刷新数据"
-                    disabled={rowLoading[row.id] || loading}
-                    onClick={() => handleRefreshRow(row, idx)}
-                    style={{ opacity: rowLoading[row.id] || loading ? 0.5 : 1 }}
-                  >
-                    {rowLoading[row.id] ? '⏳' : '🔄'}
-                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      title="刷新数据"
+                      disabled={rowLoading[row.id] || loading || row.status === 'scraping'}
+                      onClick={() => handleRefreshRow(row, idx)}
+                      style={{ opacity: rowLoading[row.id] || loading || row.status === 'scraping' ? 0.5 : 1 }}
+                    >
+                      {rowLoading[row.id] || row.status === 'scraping' ? '⏳' : '🔄'}
+                    </button>
+                    {errorMessages[row.id] && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '-30px', 
+                        right: '0', 
+                        background: '#f5f5f5', 
+                        border: '1px solid #ddd',
+                        padding: '5px 8px',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        color: 'red',
+                        whiteSpace: 'nowrap',
+                        zIndex: 10
+                      }}>
+                        {errorMessages[row.id]}
+                      </div>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
