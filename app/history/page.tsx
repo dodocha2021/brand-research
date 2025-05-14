@@ -113,7 +113,9 @@ export default function HistoryPage() {
                               .filter(
                                 key =>
                                   key !== 'id' &&
-                                  key !== 'original_brand'
+                                  key !== 'original_brand' &&
+                                  key !== 'logo' &&
+                                  key !== 'dataset'
                               )
                             // 保证 competitor_name 后面紧跟 region
                             const competitorIdx = keys.indexOf('competitor_name')
@@ -142,7 +144,9 @@ export default function HistoryPage() {
                           const keys = Object.keys(item).filter(
                             key =>
                               key !== 'id' &&
-                              key !== 'original_brand'
+                              key !== 'original_brand' &&
+                              key !== 'logo' &&
+                              key !== 'dataset'
                           )
                           const competitorIdx = keys.indexOf(
                             'competitor_name'

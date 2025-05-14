@@ -1343,7 +1343,7 @@ export default function SimpleModePage() {
 
       {/* Debug Responses */}
       <div className="card">
-        <h3>调试信息</h3>
+        <h3>Debug Information</h3>
         <div
           ref={debugContainerRef}
           style={{
@@ -1433,11 +1433,11 @@ export default function SimpleModePage() {
               cursor: 'pointer'
             }}
           >
-            清除日志
+            Clear Logs
           </button>
           
           <span style={{ fontSize: '12px', color: '#666' }}>
-            总计 {debugResponses.length} 条日志
+            Total: {debugResponses.length} logs
           </span>
         </div>
       </div>
