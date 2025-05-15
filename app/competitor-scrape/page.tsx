@@ -229,6 +229,27 @@ export default function CompetitorScrapePage() {
       } : r
     ));
     
+    // 新增：直接清空数据库中的URL、followers和total_views字段
+    try {
+      console.log(`清空数据库ID=${row.id}的URL、followers和total_views数据`);
+      const { error: clearDataError } = await supabase
+        .from('competitor_search_history')
+        .update({
+          competitor_url: '',  // 清空URL
+          followers: null,     // 清空followers
+          total_views: null    // 清空total_views
+        })
+        .eq('id', row.id);
+        
+      if (clearDataError) {
+        console.error(`清空数据库数据失败:`, clearDataError);
+      } else {
+        console.log(`已成功清空数据库ID=${row.id}的数据`);
+      }
+    } catch (clearError) {
+      console.error(`清空数据库出错:`, clearError);
+    }
+    
     // 设置3分钟超时
     const timeoutId = setTimeout(() => {
       console.log(`ID=${row.id}的抓取任务超时，重置状态`);

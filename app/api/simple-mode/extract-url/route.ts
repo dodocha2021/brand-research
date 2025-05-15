@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
 
     // 3. 第一步：调用gpt4o_search的social_accounts任务获取可能的URL
     const origin = req.nextUrl.origin
-    debugInfo.steps.push(`1. 调用social_accounts任务查找候选URL，品牌: ${name}, 平台: ${platform}`);
+    debugInfo.steps.push(`1. Calling social_accounts task to find candidate URLs, brand: ${name}, platform: ${platform}`);
     
     const searchRes = await fetch(`${origin}/api/gpt4o_search`, {
       method: 'POST',
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     if (!searchRes.ok) {
       const text = await searchRes.text()
       console.error('gpt4o_search (social_accounts) error:', searchRes.status, text)
-      debugInfo.steps.push(`Error: social_accounts调用失败 (${searchRes.status})`);
+      debugInfo.steps.push(`Error: social_accounts call failed (${searchRes.status})`);
       debugInfo.rawResults.social_accounts_error = text;
       
       return NextResponse.json(
@@ -82,12 +82,12 @@ export async function POST(req: NextRequest) {
     const searchData = await searchRes.json()
     const candidateUrls = searchData.results || []
     
-    debugInfo.steps.push(`2. social_accounts任务返回${candidateUrls.length}个候选URL`);
+    debugInfo.steps.push(`2. social_accounts task returned ${candidateUrls.length} candidate URLs`);
     debugInfo.rawResults.social_accounts = candidateUrls;
     
     // 如果没有找到候选URL，直接返回空结果
     if (candidateUrls.length === 0) {
-      debugInfo.steps.push(`3. 没有找到候选URL，返回空结果`);
+      debugInfo.steps.push(`3. No candidate URLs found, returning empty result`);
       
       return NextResponse.json({
         name,
@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     }
     
     // 4. 第二步：调用verify_urls任务从候选URL中选择最佳URL
-    debugInfo.steps.push(`3. 调用verify_urls任务验证${candidateUrls.length}个候选URL`);
+    debugInfo.steps.push(`3. Calling verify_urls task to validate ${candidateUrls.length} candidate URLs`);
     
     const verifyRes = await fetch(`${origin}/api/gpt4o_search`, {
       method: 'POST',
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
     if (!verifyRes.ok) {
       const text = await verifyRes.text()
       console.error('gpt4o_search (verify_urls) error:', verifyRes.status, text)
-      debugInfo.steps.push(`Error: verify_urls调用失败 (${verifyRes.status})`);
+      debugInfo.steps.push(`Error: verify_urls call failed (${verifyRes.status})`);
       debugInfo.rawResults.verify_urls_error = text;
       
       return NextResponse.json(
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
     const verifyData = await verifyRes.json()
     const finalUrl = verifyData.results && verifyData.results.length > 0 ? verifyData.results[0] : ''
     
-    debugInfo.steps.push(`4. verify_urls任务选择了最佳URL: ${finalUrl || '(无)'}`);
+    debugInfo.steps.push(`4. verify_urls task selected the best URL: ${finalUrl || '(none)'}`);
     debugInfo.rawResults.verify_urls = verifyData.results || [];
 
     // 5. 返回结果

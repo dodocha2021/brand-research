@@ -9,7 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 // Set wait time after last webhook arrival (milliseconds)
 const WAIT_TIME_AFTER_LAST_WEBHOOK = 2 * 60 * 1000; // 2 minutes
 // Set absolute maximum wait time (milliseconds)
-const MAX_TOTAL_WAIT_TIME = 5 * 60 * 1000; // 5 minutes (balanced wait time)
+const MAX_TOTAL_WAIT_TIME = 8 * 60 * 1000; // 5 minutes (balanced wait time)
 
 export async function POST(request: NextRequest) {
   console.log('[check-scraping-status] Processing request');
