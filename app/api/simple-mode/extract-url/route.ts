@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     
     const verifyData = await verifyRes.json()
     const finalUrl = verifyData.results && verifyData.results.length > 0 ? verifyData.results[0] : ''
-    
+
     debugInfo.steps.push(`4. verify_urls task selected the best URL: ${finalUrl || '(none)'}`);
     debugInfo.rawResults.verify_urls = verifyData.results || [];
 

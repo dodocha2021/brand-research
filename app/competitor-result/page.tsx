@@ -23,6 +23,7 @@ export default function CompetitorResultPage() {
   const [showSaveEditor, setShowSaveEditor] = useState(false)
   const [showScrape, setShowScrape] = useState(false)
   const [refreshingIdx, setRefreshingIdx] = useState<number | null>(null)
+  const [usePerplexity, setUsePerplexity] = useState(true)
 
   useEffect(() => {
     if (!idsParam) return
@@ -70,32 +71,43 @@ export default function CompetitorResultPage() {
     return result
   }
 
-  // Next: 处理 all platform、请求GPT、填充URL
+  // Next: 处理 all platform、请求API、填充URL
   const handleNext = async () => {
+    console.log(`==== Starting handleNext function with ${usePerplexity ? 'Perplexity API' : 'GPT Search API'} ====`);
     setLoading(true)
     try {
+      console.log("Processing rows:", rows);
       const fixedRows = rows.map(row =>
         row.competitor_name === row.original_brand
           ? { ...row, platform: 'all platform' }
           : row
       )
+      console.log("Fixed rows with 'all platform':", fixedRows);
+
       const emptyPlatformRows = fixedRows.filter(row => !row.platform)
       if (emptyPlatformRows.length > 0) {
+        console.log("Empty platform rows detected:", emptyPlatformRows);
         toast.error('Please select a platform for all rows')
         setLoading(false)
         return
       }
+
+      console.log("Deleting 'all platform' rows from database...");
       for (const row of fixedRows) {
         if ((row.platform === 'all platform' || !row.platform) && row.id) {
+          console.log("Deleting row:", row);
           await supabase
             .from('competitor_search_history')
             .delete()
             .eq('id', row.id)
         }
       }
+
+      console.log("Splitting 'all platform' rows into individual platforms...");
       let processedRows: any[] = []
       fixedRows.forEach(row => {
         if (row.platform === 'all platform') {
+          console.log(`Splitting 'all platform' row for competitor: ${row.competitor_name}`);
           SPLIT_PLATFORMS.forEach(p => {
             processedRows.push({
               ...row,
@@ -108,42 +120,91 @@ export default function CompetitorResultPage() {
           processedRows.push(row)
         }
       })
+      console.log("Processed rows after splitting:", processedRows);
 
       const newRows = []
+      console.log(`Starting URL lookup for each row using ${usePerplexity ? 'Perplexity API' : 'GPT Search API'}...`);
       for (const row of processedRows) {
+        console.log(`Processing row for competitor: ${row.competitor_name}, platform: ${row.platform}`);
         let url = ''
         try {
-          // 使用gpt4o_search的social_account_single任务
-          const res = await fetch('/api/gpt4o_search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          if (usePerplexity) {
+            // 使用perplexity_url接口获取社交媒体URL
+            console.log(`Calling perplexity_url API with params:`, {
+              brand: row.competitor_name,
+              platform: row.platform,
+              region: row.region
+            });
+            
+            const res = await fetch('/api/perplexity_url', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                brand: row.competitor_name,
+                platform: row.platform,
+                region: row.region
+              })
+            })
+            console.log(`API response status:`, res.status);
+            
+            const data = await res.json()
+            console.log(`API response data:`, data);
+            
+            url = data?.url || ''
+          } else {
+            // 使用gpt4o_search的social_account_single任务
+            console.log(`Calling gpt4o_search API with params:`, {
               query: row.competitor_name,
               task: 'social_account_single',
               platform: row.platform,
               region: row.region
+            });
+            
+            const res = await fetch('/api/gpt4o_search', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                query: row.competitor_name,
+                task: 'social_account_single',
+                platform: row.platform,
+                region: row.region
+              })
             })
-          })
-          const data = await res.json()
-          url = data?.results?.[0] || ''
+            console.log(`API response status:`, res.status);
+            
+            const data = await res.json()
+            console.log(`API response data:`, data);
+            
+            url = data?.results?.[0] || ''
+          }
+          
+          console.log(`Extracted URL: ${url}`);
         } catch (error) {
-          console.error('GPT-4o search API error:', error)
+          console.error(`${usePerplexity ? 'Perplexity URL' : 'GPT Search'} API error:`, error);
         }
+        
+        console.log(`Adding processed row with URL: ${url}`);
         newRows.push({
           ...row,
           competitor_url: url
         })
       }
 
+      console.log("All rows processed with URLs:", newRows);
+      console.log("Updating state and UI...");
+      
       setRows(newRows)
       setShowNextButton(false)
       setShowSaveEditor(true)
       toast.success('URLs have been auto-filled')
+      console.log("State updated successfully");
+      
     } catch (e) {
       console.error('Auto fill failed:', e)
       toast.error('Auto fill failed')
     }
     setLoading(false)
+    console.log("==== handleNext function completed ====");
   }
 
   // Save: 更新数据库
@@ -360,18 +421,84 @@ export default function CompetitorResultPage() {
           </div>
         )}
         {showNextButton && (
-          <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <span style={{ color: '#222', fontSize: 16 }}>
-              Please select a platform for each competitor and send to AI for analysis. You may also select "all platforms", but this may take more time.
+              First, select a platform for each competitor above. Then choose an AI model below to analyze all competitors in parallel. Note: selecting "all platforms" will significantly increase processing time regardless of the AI model used.
             </span>
-            <button
-              className="search-btn"
-              style={{ maxWidth: 300, width: 180 }}
-              onClick={handleNext}
-              disabled={loading}
-            >
-              {loading ? 'Loading...' : 'Next'}
-            </button>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
+              {/* Tab选择器 */}
+              <div style={{ display: 'flex', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
+                <div 
+                  onClick={() => setUsePerplexity(true)}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    backgroundColor: usePerplexity ? '#4338ca' : '#f9fafb',
+                    color: usePerplexity ? 'white' : '#6b7280',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    borderRight: '1px solid #e5e7eb',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: usePerplexity ? 'bold' : 'normal' }}>
+                    <span style={{ fontSize: '18px' }}>🎯</span>
+                    <span style={{ fontSize: '16px' }}>Perplexity</span>
+                  </div>
+                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                    Accurate but slower results
+                  </div>
+                </div>
+                
+                <div 
+                  onClick={() => setUsePerplexity(false)}
+                  style={{
+                    flex: 1,
+                    padding: '16px',
+                    backgroundColor: !usePerplexity ? '#22c55e' : '#f9fafb',
+                    color: !usePerplexity ? 'white' : '#6b7280',
+                    cursor: 'pointer',
+                    textAlign: 'center',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: !usePerplexity ? 'bold' : 'normal' }}>
+                    <span style={{ fontSize: '18px' }}>⚡</span>
+                    <span style={{ fontSize: '16px' }}>GPT</span>
+                  </div>
+                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
+                    Fast but less comprehensive
+                  </div>
+                </div>
+              </div>
+              
+              {/* Next按钮 */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  className="search-btn"
+                  style={{ 
+                    width: '180px',
+                    padding: '12px 0',
+                    backgroundColor: usePerplexity ? '#4338ca' : '#22c55e',
+                    borderRadius: '8px',
+                    transition: 'background-color 0.3s'
+                  }}
+                  onClick={handleNext}
+                  disabled={loading}
+                >
+                  {loading ? 'Processing...' : 'Next'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
         {showSaveEditor && (  

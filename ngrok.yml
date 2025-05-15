@@ -1,0 +1,7 @@
+authtoken: 2x7UJIQmO5F1aHNExE3t9VsI7Ax_4YNvrphJfPbsqYtQc4Sgi
+version: 2
+tunnels:
+  brand-research:
+    proto: http
+    addr: 3000
+    subdomain: brand-research

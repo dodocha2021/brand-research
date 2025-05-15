@@ -1408,10 +1408,10 @@ export default function SimpleModePage() {
                 </div>
               ) : (
                 <div>
-                  <strong>{dbg.step}:</strong>
-                  <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                    {JSON.stringify(dbg.data, null, 2)}
-                  </pre>
+              <strong>{dbg.step}:</strong>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                {JSON.stringify(dbg.data, null, 2)}
+              </pre>
                 </div>
               )}
             </div>
