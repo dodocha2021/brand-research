@@ -238,13 +238,6 @@ Output ONLY the list of competitors, nothing else.`
           >
             Simple Mode
           </button>
-          <button
-            className="search-btn"
-            style={{ width: 80, background: '#e0ecff', color: '#2563eb', marginLeft: 16 }}
-            onClick={() => window.location.href = '/competitor-result/test'}
-          >
-            Brand Search
-          </button>
         </div>
 
         {/* 结果区域 */}

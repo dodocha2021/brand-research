@@ -115,7 +115,8 @@ export default function HistoryPage() {
                                   key !== 'id' &&
                                   key !== 'original_brand' &&
                                   key !== 'logo' &&
-                                  key !== 'dataset'
+                                  key !== 'dataset' &&
+                                  key !== 'actorRunId'
                               )
                             // 保证 competitor_name 后面紧跟 region
                             const competitorIdx = keys.indexOf('competitor_name')
@@ -146,7 +147,8 @@ export default function HistoryPage() {
                               key !== 'id' &&
                               key !== 'original_brand' &&
                               key !== 'logo' &&
-                              key !== 'dataset'
+                              key !== 'dataset' &&
+                              key !== 'actorRunId'
                           )
                           const competitorIdx = keys.indexOf(
                             'competitor_name'
@@ -195,6 +197,20 @@ export default function HistoryPage() {
                                     item[key] ? (
                                     <a
                                       href={item[key]}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{
+                                        color: '#2563eb',
+                                        textDecoration: 'underline',
+                                        wordBreak: 'break-all'
+                                      }}
+                                    >
+                                      {item[key]}
+                                    </a>
+                                  ) : key === 'defaultDatasetId' && 
+                                    item[key] ? (
+                                    <a
+                                      href={`https://api.apify.com/v2/datasets/${item[key]}/items`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       style={{
