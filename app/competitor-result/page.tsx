@@ -22,7 +22,7 @@ export default function CompetitorResultPage() {
   const [showNextButton, setShowNextButton] = useState(true)
   const [showSaveEditor, setShowSaveEditor] = useState(false)
   const [showScrape, setShowScrape] = useState(false)
-  const [refreshingIdx, setRefreshingIdx] = useState<number | null>(null)
+  const [refreshingStates, setRefreshingStates] = useState<boolean[]>([])
   const [usePerplexity, setUsePerplexity] = useState(true)
 
   useEffect(() => {
@@ -37,6 +37,8 @@ export default function CompetitorResultPage() {
         toast.error('Failed to load data')
       } else {
         setRows(data || [])
+        // 初始化每一行的刷新状态为false
+        setRefreshingStates(new Array(data?.length || 0).fill(false))
       }
       setLoading(false)
     }
@@ -73,7 +75,7 @@ export default function CompetitorResultPage() {
 
   // Next: 处理 all platform、请求API、填充URL
   const handleNext = async () => {
-    console.log(`==== Starting handleNext function with ${usePerplexity ? 'Perplexity API' : 'GPT Search API'} ====`);
+    console.log(`==== Starting handleNext function with Perplexity API ====`);
     setLoading(true)
     try {
       console.log("Processing rows:", rows);
@@ -121,83 +123,85 @@ export default function CompetitorResultPage() {
         }
       })
       console.log("Processed rows after splitting:", processedRows);
+      
+      // 先显示处理后的行，但URL为空，立即给用户视觉反馈
+      setRows(processedRows)
+      // 重置刷新状态数组，与新的行数量匹配
+      setRefreshingStates(new Array(processedRows.length).fill(false))
+      setShowNextButton(false)
+      setShowSaveEditor(true)
+      toast.success('Processing URLs in parallel...')
 
-      const newRows = []
-      console.log(`Starting URL lookup for each row using ${usePerplexity ? 'Perplexity API' : 'GPT Search API'}...`);
-      for (const row of processedRows) {
-        console.log(`Processing row for competitor: ${row.competitor_name}, platform: ${row.platform}`);
-        let url = ''
+      // 创建并发请求数组
+      console.log(`Starting parallel URL lookup for all rows using Perplexity API...`);
+      
+      // 为每一行创建一个Promise，所有Promise并行执行
+      const promises = processedRows.map(async (row, index) => {
+        console.log(`Creating request for competitor: ${row.competitor_name}, platform: ${row.platform}`);
         try {
-          if (usePerplexity) {
-            // 使用perplexity_url接口获取社交媒体URL
-            console.log(`Calling perplexity_url API with params:`, {
+          let url = '';
+          
+          // 使用perplexity_url接口获取社交媒体URL
+          console.log(`Calling perplexity_url API with params:`, {
+            brand: row.competitor_name,
+            platform: row.platform,
+            region: row.region
+          });
+          
+          const res = await fetch('/api/perplexity_url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
               brand: row.competitor_name,
               platform: row.platform,
               region: row.region
-            });
-            
-            const res = await fetch('/api/perplexity_url', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                brand: row.competitor_name,
-                platform: row.platform,
-                region: row.region
-              })
             })
-            console.log(`API response status:`, res.status);
-            
-            const data = await res.json()
-            console.log(`API response data:`, data);
-            
-            url = data?.url || ''
-          } else {
-            // 使用gpt4o_search的social_account_single任务
-            console.log(`Calling gpt4o_search API with params:`, {
-              query: row.competitor_name,
-              task: 'social_account_single',
-              platform: row.platform,
-              region: row.region
-            });
-            
-            const res = await fetch('/api/gpt4o_search', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                query: row.competitor_name,
-                task: 'social_account_single',
-                platform: row.platform,
-                region: row.region
-              })
-            })
-            console.log(`API response status:`, res.status);
-            
-            const data = await res.json()
-            console.log(`API response data:`, data);
-            
-            url = data?.results?.[0] || ''
-          }
+          });
           
-          console.log(`Extracted URL: ${url}`);
+          console.log(`API response status for ${row.competitor_name}: ${res.status}`);
+          
+          const data = await res.json();
+          console.log(`API response data for ${row.competitor_name}:`, data);
+          
+          url = data?.url || '';
+          
+          console.log(`Extracted URL for ${row.competitor_name}: ${url}`);
+          
+          // 单个请求完成后，立即更新UI中对应的行
+          setRows(prev => {
+            const updated = [...prev];
+            const currentRowIndex = prev.findIndex(r => 
+              r.competitor_name === row.competitor_name && 
+              r.platform === row.platform
+            );
+            
+            if (currentRowIndex !== -1) {
+              updated[currentRowIndex] = {
+                ...updated[currentRowIndex],
+                competitor_url: url
+              };
+            }
+            
+            return updated;
+          });
+          
+          // 返回处理结果
+          return {
+            ...row,
+            competitor_url: url
+          };
         } catch (error) {
-          console.error(`${usePerplexity ? 'Perplexity URL' : 'GPT Search'} API error:`, error);
+          console.error(`API error for ${row.competitor_name}:`, error);
+          // 即使出错，也返回原始行，只是没有URL
+          return row;
         }
-        
-        console.log(`Adding processed row with URL: ${url}`);
-        newRows.push({
-          ...row,
-          competitor_url: url
-        })
-      }
-
-      console.log("All rows processed with URLs:", newRows);
-      console.log("Updating state and UI...");
+      });
       
-      setRows(newRows)
-      setShowNextButton(false)
-      setShowSaveEditor(true)
-      toast.success('URLs have been auto-filled')
-      console.log("State updated successfully");
+      // 等待所有请求完成（但UI已经在每个请求完成时更新）
+      await Promise.all(promises);
+      
+      toast.success('All URLs have been processed')
+      console.log("All parallel requests completed");
       
     } catch (e) {
       console.error('Auto fill failed:', e)
@@ -299,8 +303,22 @@ export default function CompetitorResultPage() {
 
   // 单行刷新URL —— 改为使用 google-gpt 搜索并填入
   const handleRefreshUrl = async (row: any, idx: number) => {
-    setRefreshingIdx(idx)
+    console.log(`Starting URL refresh for ${row.competitor_name} on ${row.platform}...`);
+    
+    // 更新特定行的刷新状态为true
+    setRefreshingStates(prev => {
+      const newStates = [...prev]
+      newStates[idx] = true
+      return newStates
+    })
+    
+    // 立即清空URL字段，给用户明确的视觉反馈
+    setRows(prev =>
+      prev.map((r, i) => i === idx ? { ...r, competitor_url: '' } : r)
+    )
+    
     try {
+      console.log(`Sending request to API...`);
       const res = await fetch('/api/google-gpt', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -310,16 +328,56 @@ export default function CompetitorResultPage() {
           region: row.region
         })
       })
+      
+      console.log(`Received response with status: ${res.status}`);
+      if (!res.ok) {
+        throw new Error(`API returned status ${res.status}`);
+      }
+      
       const data = await res.json()
+      console.log(`API response data:`, data);
+      
       const url = data?.url || ''
+      console.log(`Extracted URL: ${url}`);
+      
+      if (!url) {
+        console.log(`No URL found in response`);
+        toast.error('No URL found. Please try again.')
+        
+        // 更新特定行的刷新状态为false
+        setRefreshingStates(prev => {
+          const newStates = [...prev]
+          newStates[idx] = false
+          return newStates
+        })
+        
+        return
+      }
+      
+      console.log(`Updating URL in row ${idx}`);
       setRows(prev =>
         prev.map((r, i) => i === idx ? { ...r, competitor_url: url } : r)
       )
       toast.success('URL refreshed!')
+      
+      // 更新特定行的刷新状态为false
+      setRefreshingStates(prev => {
+        const newStates = [...prev]
+        newStates[idx] = false
+        return newStates
+      })
+      
     } catch (e) {
-      toast.error('Failed to refresh URL')
+      console.error(`Error refreshing URL:`, e);
+      toast.error('Failed to refresh URL. Please try again later.')
+      
+      // 更新特定行的刷新状态为false
+      setRefreshingStates(prev => {
+        const newStates = [...prev]
+        newStates[idx] = false
+        return newStates
+      })
     }
-    setRefreshingIdx(null)
   }
 
   return (
@@ -404,11 +462,11 @@ export default function CompetitorResultPage() {
                 <td style={{ textAlign: 'center' }}>
                   <button
                     title="Refresh URL"
-                    disabled={refreshingIdx === idx || loading}
+                    disabled={refreshingStates[idx] || loading}
                     onClick={() => handleRefreshUrl(row, idx)}
-                    style={{ opacity: refreshingIdx === idx || loading ? 0.5 : 1 }}
+                    style={{ opacity: refreshingStates[idx] || loading ? 0.5 : 1 }}
                   >
-                    {refreshingIdx === idx ? '⏳' : '🔄'}
+                    {refreshingStates[idx] ? '⏳' : '🔄'}
                   </button>
                 </td>
               </tr>
@@ -423,64 +481,10 @@ export default function CompetitorResultPage() {
         {showNextButton && (
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <span style={{ color: '#222', fontSize: 16 }}>
-              First, select a platform for each competitor above. Then choose an AI model below to analyze all competitors in parallel. Note: selecting "all platforms" will significantly increase processing time regardless of the AI model used.
+              First, select a platform for each competitor above. Then click "Next" to analyze all competitors in parallel. Note: selecting "all platforms" will significantly increase processing time.
             </span>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '8px' }}>
-              {/* Tab选择器 */}
-              <div style={{ display: 'flex', width: '100%', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb' }}>
-                <div 
-                  onClick={() => setUsePerplexity(true)}
-                  style={{
-                    flex: 1,
-                    padding: '16px',
-                    backgroundColor: usePerplexity ? '#4338ca' : '#f9fafb',
-                    color: usePerplexity ? 'white' : '#6b7280',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    borderRight: '1px solid #e5e7eb',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: usePerplexity ? 'bold' : 'normal' }}>
-                    <span style={{ fontSize: '18px' }}>🎯</span>
-                    <span style={{ fontSize: '16px' }}>Perplexity</span>
-                  </div>
-                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                    Accurate but slower results
-                  </div>
-                </div>
-                
-                <div 
-                  onClick={() => setUsePerplexity(false)}
-                  style={{
-                    flex: 1,
-                    padding: '16px',
-                    backgroundColor: !usePerplexity ? '#22c55e' : '#f9fafb',
-                    color: !usePerplexity ? 'white' : '#6b7280',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s ease',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: !usePerplexity ? 'bold' : 'normal' }}>
-                    <span style={{ fontSize: '18px' }}>⚡</span>
-                    <span style={{ fontSize: '16px' }}>GPT</span>
-                  </div>
-                  <div style={{ fontSize: '14px', marginTop: '4px' }}>
-                    Fast but less comprehensive
-                  </div>
-                </div>
-              </div>
-              
               {/* Next按钮 */}
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
@@ -488,7 +492,7 @@ export default function CompetitorResultPage() {
                   style={{ 
                     width: '180px',
                     padding: '12px 0',
-                    backgroundColor: usePerplexity ? '#4338ca' : '#22c55e',
+                    backgroundColor: '#4338ca',
                     borderRadius: '8px',
                     transition: 'background-color 0.3s'
                   }}

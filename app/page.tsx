@@ -106,6 +106,8 @@ Region: ${region}`
               content: `Below is a report generated about the brand ${searchTerm} and its top direct competitors in the ${region} area. 
 Extract ONLY the direct competitors from the report, EXCLUDING the brand itself (${searchTerm}).
 Format the output as a simple comma-separated list.
+IMPORTANT: Ensure each competitor name is complete with its full legal entity (if mentioned), and avoid splitting company names from their legal suffixes (like Inc., Ltd., Co., etc.). 
+Do NOT list legal suffixes (Inc., Ltd., Co., etc.) as separate entities.
 Output ONLY the list of competitors, nothing else.`
             },
             {
@@ -118,9 +120,20 @@ Output ONLY the list of competitors, nothing else.`
       const gpt4oData = await summaryRes.json()
       const competitorsText = gpt4oData?.choices?.[0]?.message?.content || ''
       setResult(competitorsText)
-      // 进入编辑模式，初始化 competitors 数组，第一个元素是搜索关键词
-      const competitorsList = competitorsText.split(',').map((c: string) => c.trim()).filter(Boolean)
-      setCompetitors([searchTerm, ...competitorsList])
+      // 处理返回的竞争对手文本，移除单独出现的法律实体后缀
+      const processCompetitorsList = (text: string) => {
+        // 分割并整理
+        let competitors = text.split(',').map(c => c.trim()).filter(Boolean);
+        
+        // 过滤掉单独的法律实体后缀
+        const legalSuffixes = ['Inc.', 'Ltd.', 'Co.', 'LLC', 'Corporation', 'Corp.', 'Limited', 'GmbH'];
+        competitors = competitors.filter(comp => !legalSuffixes.includes(comp));
+        
+        return competitors;
+      };
+
+      const competitorsList = processCompetitorsList(competitorsText);
+      setCompetitors([searchTerm, ...competitorsList]);
       setStep('edit')
     } catch (e: any) {
       setResult(e.message || 'Error occurred')

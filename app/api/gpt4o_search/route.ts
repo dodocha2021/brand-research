@@ -278,18 +278,21 @@ function processResults(result: string, task: TaskType, maxResults?: number): st
 
   // 根据任务类型处理结果
   if (task === 'social_accounts') {
-    // 只保留URL
-    lines = lines.filter(line => line.startsWith('http'));
+    // 只验证URL，接受http或www开头的URL，不做修改
+    lines = lines.filter(line => line.startsWith('http') || line.startsWith('www.'));
   } else if (task === 'social_account_single' || task === 'verify_urls') {
-    // 对于单一URL验证任务，确保结果是URL或空
+    // 对于单一URL验证任务，确保结果是有效URL或空
     if (lines.length > 0) {
-      // 如果第一行不是URL，清空结果
-      if (!lines[0].startsWith('http')) {
-        console.log(`非URL响应被过滤 (${task}):`, lines[0]);
-        lines = [];
+      const firstLine = lines[0];
+      
+      // 检查是否是有效URL（以http或www开头）
+      if (firstLine.startsWith('http') || firstLine.startsWith('www.')) {
+        // 有效URL，保留原始格式
+        lines = [firstLine];
       } else {
-        // 只保留第一行，必须是URL
-        lines = [lines[0]];
+        // 不是有效URL格式，记录并过滤
+        console.log(`非URL响应被过滤 (${task}):`, firstLine);
+        lines = [];
       }
     }
   }

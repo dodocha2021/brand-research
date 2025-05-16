@@ -1,7 +1,9 @@
-authtoken: 2x7UJIQmO5F1aHNExE3t9VsI7Ax_4YNvrphJfPbsqYtQc4Sgi
+# 请将下面的 YOUR_AUTH_TOKEN_HERE 替换为您从 https://dashboard.ngrok.com/get-started/your-authtoken 获取的新 authtoken
+authtoken: 2rlhZcPbrYpT7XYgkppC470Z1pV_6HhG1d7qYa2hBjUmQLNb5
 version: 2
 tunnels:
   brand-research:
     proto: http
     addr: 3000
-    subdomain: brand-research
+    domain: gladly-adjusted-kit.ngrok-free.app
+    # subdomain: gladly-adjusted-kit  # 免费计划不支持自定义子域名

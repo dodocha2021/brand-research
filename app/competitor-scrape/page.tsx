@@ -430,10 +430,22 @@ export default function CompetitorScrapePage() {
                   />
                 </td>
                 <td>
-                  <input
-                    value={row.competitor_url || ''}
-                    disabled
-                  />
+                  {editMode ? (
+                    <input
+                      value={row.competitor_url || ''}
+                      placeholder="Enter URL"
+                      onChange={e => {
+                        const newRows = [...editedRows]
+                        newRows[idx].competitor_url = e.target.value
+                        setEditedRows(newRows)
+                      }}
+                    />
+                  ) : (
+                    <input
+                      value={row.competitor_url || ''}
+                      disabled
+                    />
+                  )}
                 </td>
                 <td>
                   {editMode ? (

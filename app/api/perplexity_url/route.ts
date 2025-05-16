@@ -23,50 +23,55 @@ const PLATFORM_PROMPTS: Record<PlatformType, string> = {
 };
 
 const ANTHROPIC_VERIFY_PROMPTS: Record<PlatformType, string> = {
-  youtube: `Analyze the following content and extract the most accurate YouTube URL link, which should be the official YouTube channel for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.youtube.com/@username" or "https://www.youtube.com/channel/channel_id". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return "NO_URL_FOUND".
+  youtube: `Analyze the following content and extract the most accurate YouTube URL link, which should be the official YouTube channel for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.youtube.com/@username" or "https://www.youtube.com/channel/channel_id". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return an empty string without any text.
 
 Remember:
 - Return only one most accurate official URL
 - Return only complete URLs (no truncation)
 - Do not create or guess URLs
 - Do not add extra text, periods, quotes, etc.
-- Ensure the returned URL matches the brand name and is the official account for that region`,
+- Ensure the returned URL matches the brand name and is the official account for that region
+- If no URL is found, return nothing (empty string)`,
 
-  linkedin: `Analyze the following content and extract the most accurate LinkedIn URL link, which should be the official LinkedIn page for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.linkedin.com/company/company-name/". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return "NO_URL_FOUND".
-
-Remember:
-- Return only one most accurate official URL
-- Return only complete URLs (no truncation)
-- Do not create or guess URLs
-- Do not add extra text, periods, quotes, etc.
-- Ensure the returned URL matches the brand name and is the official account for that region`,
-
-  instagram: `Analyze the following content and extract the most accurate Instagram URL link, which should be the official Instagram account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.instagram.com/username/". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return "NO_URL_FOUND".
+  linkedin: `Analyze the following content and extract the most accurate LinkedIn URL link, which should be the official LinkedIn page for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.linkedin.com/company/company-name/". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return an empty string without any text.
 
 Remember:
 - Return only one most accurate official URL
 - Return only complete URLs (no truncation)
 - Do not create or guess URLs
 - Do not add extra text, periods, quotes, etc.
-- Ensure the returned URL matches the brand name and is the official account for that region`,
+- Ensure the returned URL matches the brand name and is the official account for that region
+- If no URL is found, return nothing (empty string)`,
 
-  tiktok: `Analyze the following content and extract the most accurate TikTok URL link, which should be the official TikTok account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.tiktok.com/@username". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return "NO_URL_FOUND".
-
-Remember:
-- Return only one most accurate official URL
-- Return only complete URLs (no truncation)
-- Do not create or guess URLs
-- Do not add extra text, periods, quotes, etc.
-- Ensure the returned URL matches the brand name and is the official account for that region`,
-
-  twitter: `Analyze the following content and extract the most accurate Twitter URL link, which should be the official Twitter account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://twitter.com/username". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return "NO_URL_FOUND".
+  instagram: `Analyze the following content and extract the most accurate Instagram URL link, which should be the official Instagram account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.instagram.com/username/". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return an empty string without any text.
 
 Remember:
 - Return only one most accurate official URL
 - Return only complete URLs (no truncation)
 - Do not create or guess URLs
 - Do not add extra text, periods, quotes, etc.
-- Ensure the returned URL matches the brand name and is the official account for that region`
+- Ensure the returned URL matches the brand name and is the official account for that region
+- If no URL is found, return nothing (empty string)`,
+
+  tiktok: `Analyze the following content and extract the most accurate TikTok URL link, which should be the official TikTok account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://www.tiktok.com/@username". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return an empty string without any text.
+
+Remember:
+- Return only one most accurate official URL
+- Return only complete URLs (no truncation)
+- Do not create or guess URLs
+- Do not add extra text, periods, quotes, etc.
+- Ensure the returned URL matches the brand name and is the official account for that region
+- If no URL is found, return nothing (empty string)`,
+
+  twitter: `Analyze the following content and extract the most accurate Twitter URL link, which should be the official Twitter account for the given brand in the specified region. Your answer should only contain a single URL, formatted as "https://twitter.com/username". Do not add any explanations or other content, only return the single URL string. If no clear official account is found, return an empty string without any text.
+
+Remember:
+- Return only one most accurate official URL
+- Return only complete URLs (no truncation)
+- Do not create or guess URLs
+- Do not add extra text, periods, quotes, etc.
+- Ensure the returned URL matches the brand name and is the official account for that region
+- If no URL is found, return nothing (empty string)`
 };
 
 export async function POST(req: NextRequest) {
@@ -193,8 +198,8 @@ export async function POST(req: NextRequest) {
     }
     
     // 7. Get final URL result
-    const finalUrl = anthropicData.choices?.[0]?.message?.content?.trim() || 'NO_URL_FOUND';
-    console.log('Final URL extracted:', finalUrl);
+    const finalUrl = anthropicData.choices?.[0]?.message?.content?.trim() || '';
+    console.log('Final URL extracted:', finalUrl ? finalUrl : '(empty string)');
     
     // 8. Return the final result
     console.log('==== perplexity_url API completed successfully ====');
