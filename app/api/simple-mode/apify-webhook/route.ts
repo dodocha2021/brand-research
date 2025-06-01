@@ -93,25 +93,56 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
     // 查找具有该 actorRunId 的记录
     console.log(`[apify-webhook] 通过 actorRunId=${actorRunId} 查找数据库记录`);
     
-    // 查找相关数据库记录
+    // 重试逻辑：重试间隔2秒，最大等待时间20秒
     let record;
-    const { data: recordData, error: findError } = await supabase
-      .from('simple_search_history')
-      .select('*')
-      .eq('actorRunId', actorRunId)
-      .maybeSingle();
+    const maxWaitTime = 20000; // 20秒
+    const retryInterval = 2000; // 2秒
+    const maxRetries = Math.floor(maxWaitTime / retryInterval); // 10次重试
+    let retryCount = 0;
     
-    if (findError) {
-      console.error('[apify-webhook] 查找记录失败:', findError);
+    while (retryCount <= maxRetries) {
+      const { data: recordData, error: findError } = await supabase
+        .from('simple_search_history')
+        .select('*')
+        .eq('actorRunId', actorRunId)
+        .maybeSingle();
+      
+      if (findError) {
+        console.error(`[apify-webhook] 查找记录失败 (尝试 ${retryCount + 1}/${maxRetries + 1}):`, findError);
+        if (retryCount === maxRetries) {
+          // 最后一次尝试也失败了
+          return;
+        }
+      } else if (recordData) {
+        // 找到记录，退出重试循环
+        console.log(`[apify-webhook] 成功找到记录 (尝试 ${retryCount + 1}/${maxRetries + 1}): id=${recordData.id}`);
+        record = recordData;
+        break;
+      } else {
+        // 记录不存在，记录重试信息
+        console.log(`[apify-webhook] 未找到 actorRunId=${actorRunId} 的记录 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+        
+        if (retryCount === maxRetries) {
+          // 达到最大重试次数，记录错误并放弃
+          console.error(`[apify-webhook] 重试超时：在 ${maxWaitTime/1000} 秒内未找到 actorRunId=${actorRunId} 的记录，共重试 ${maxRetries + 1} 次，放弃处理`);
+          return;
+        }
+      }
+      
+      retryCount++;
+      
+      // 等待重试间隔（除非这是最后一次尝试）
+      if (retryCount <= maxRetries) {
+        console.log(`[apify-webhook] 等待 ${retryInterval/1000} 秒后重试...`);
+        await new Promise(resolve => setTimeout(resolve, retryInterval));
+      }
+    }
+    
+    if (!record) {
+      console.error(`[apify-webhook] 重试逻辑结束但仍未找到记录，这不应该发生`);
       return;
     }
     
-    if (!recordData) {
-      console.log(`[apify-webhook] 未找到 actorRunId=${actorRunId} 的记录`);
-      return;
-    }
-    
-    record = recordData;
     const { id, competitor_name: name, platform, url, search_id: searchId } = record;
     
     console.log(`[apify-webhook] 找到匹配记录: id=${id}, competitor=${name}, platform=${platform}, searchId=${searchId}`);
