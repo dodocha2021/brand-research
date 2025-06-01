@@ -101,30 +101,61 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
     let retryCount = 0;
     
     while (retryCount <= maxRetries) {
-      const { data: recordData, error: findError } = await supabase
-        .from('simple_search_history')
-        .select('*')
-        .eq('actorRunId', actorRunId)
-        .maybeSingle();
-      
-      if (findError) {
-        console.error(`[apify-webhook] 查找记录失败 (尝试 ${retryCount + 1}/${maxRetries + 1}):`, findError);
-        if (retryCount === maxRetries) {
-          // 最后一次尝试也失败了
-          return;
+      try {
+        console.log(`[apify-webhook] 开始数据库查询 (尝试 ${retryCount + 1}/${maxRetries + 1}): actorRunId=${actorRunId}`);
+        
+        const { data: recordData, error: findError } = await supabase
+          .from('simple_search_history')
+          .select('*')
+          .eq('actorRunId', actorRunId)
+          .maybeSingle();
+        
+        console.log(`[apify-webhook] 数据库查询完成 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+        
+        if (findError) {
+          console.error(`[apify-webhook] 数据库查询错误 (尝试 ${retryCount + 1}/${maxRetries + 1}):`, {
+            error: findError,
+            code: findError.code,
+            message: findError.message,
+            details: findError.details,
+            hint: findError.hint,
+            actorRunId: actorRunId
+          });
+          
+          if (retryCount === maxRetries) {
+            // 最后一次尝试也失败了
+            console.error(`[apify-webhook] 数据库查询在所有重试后仍然失败，放弃处理`);
+            return;
+          }
+        } else if (recordData) {
+          // 找到记录，退出重试循环
+          console.log(`[apify-webhook] 成功找到记录 (尝试 ${retryCount + 1}/${maxRetries + 1}): id=${recordData.id}, competitor=${recordData.competitor_name}, platform=${recordData.platform}`);
+          record = recordData;
+          break;
+        } else {
+          // 记录不存在，记录重试信息
+          console.log(`[apify-webhook] 未找到 actorRunId=${actorRunId} 的记录 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+          
+          if (retryCount === maxRetries) {
+            // 达到最大重试次数，记录错误并放弃
+            console.error(`[apify-webhook] 重试超时：在 ${maxWaitTime/1000} 秒内未找到 actorRunId=${actorRunId} 的记录，共重试 ${maxRetries + 1} 次，放弃处理`);
+            return;
+          }
         }
-      } else if (recordData) {
-        // 找到记录，退出重试循环
-        console.log(`[apify-webhook] 成功找到记录 (尝试 ${retryCount + 1}/${maxRetries + 1}): id=${recordData.id}`);
-        record = recordData;
-        break;
-      } else {
-        // 记录不存在，记录重试信息
-        console.log(`[apify-webhook] 未找到 actorRunId=${actorRunId} 的记录 (尝试 ${retryCount + 1}/${maxRetries + 1})`);
+      } catch (unexpectedError) {
+        // 捕获数据库查询过程中的任何意外错误
+        console.error(`[apify-webhook] 数据库查询发生意外错误 (尝试 ${retryCount + 1}/${maxRetries + 1}):`, {
+          error: unexpectedError,
+          errorType: typeof unexpectedError,
+          errorName: unexpectedError instanceof Error ? unexpectedError.name : 'Unknown',
+          errorMessage: unexpectedError instanceof Error ? unexpectedError.message : String(unexpectedError),
+          errorStack: unexpectedError instanceof Error ? unexpectedError.stack : undefined,
+          actorRunId: actorRunId
+        });
         
         if (retryCount === maxRetries) {
-          // 达到最大重试次数，记录错误并放弃
-          console.error(`[apify-webhook] 重试超时：在 ${maxWaitTime/1000} 秒内未找到 actorRunId=${actorRunId} 的记录，共重试 ${maxRetries + 1} 次，放弃处理`);
+          // 最后一次尝试也失败了
+          console.error(`[apify-webhook] 数据库查询在所有重试后仍然发生意外错误，放弃处理`);
           return;
         }
       }
