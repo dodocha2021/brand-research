@@ -147,16 +147,23 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
     console.log(`[apify-webhook] 获取数据集: ${datasetUrl}`);
     
     try {
+      console.log(`[apify-webhook] 开始请求Apify数据集...`);
       const response = await fetch(datasetUrl);
+      console.log(`[apify-webhook] Apify响应状态: ${response.status} ${response.statusText}`);
+      
       if (!response.ok) {
-        throw new Error(`获取数据失败: ${response.status} ${response.statusText}`);
+        const errorText = await response.text();
+        console.error(`[apify-webhook] Apify API错误响应: ${errorText}`);
+        throw new Error(`获取数据失败: ${response.status} ${response.statusText} - ${errorText}`);
       }
       
       items = await response.json();
       console.log(`[apify-webhook] 获取到${items.length}条数据项`);
+      console.log(`[apify-webhook] 第一条数据样本:`, items.length > 0 ? JSON.stringify(items[0]).substring(0, 500) : '无数据');
       
       // 将完整数据集保存为JSON字符串
       const datasetJson = JSON.stringify(items);
+      console.log(`[apify-webhook] 处理平台: ${platform}`);
       
       if (platform === 'tiktok') {
         // 处理TikTok平台数据  
@@ -175,6 +182,7 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
           console.warn('[apify-webhook] TikTok数据集为空');
         }
       } else if (platform === 'instagram') {
+        console.log(`[apify-webhook] 处理Instagram平台数据，数据项数量: ${items.length}`);
         // 处理Instagram平台数据
         if (items.length > 0) {
           // 从数据中提取followers数量
@@ -186,11 +194,13 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
             console.log(`[apify-webhook] 提取到Instagram粉丝数: ${fans_count}`);
           } else {
             console.warn('[apify-webhook] 未在Instagram数据中找到followersCount字段');
+            console.log('[apify-webhook] Instagram数据可用字段:', Object.keys(firstItem));
           }
         } else {
           console.warn('[apify-webhook] Instagram数据集为空');
         }
       } else if (platform === 'linkedin') {
+        console.log(`[apify-webhook] 处理LinkedIn平台数据，数据项数量: ${items.length}`);
         // 处理LinkedIn平台数据
         if (items.length > 0) {
           // 从数据中提取follower_count数量
@@ -202,11 +212,13 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
             console.log(`[apify-webhook] 提取到LinkedIn粉丝数: ${fans_count}`);
           } else {
             console.warn('[apify-webhook] 未在LinkedIn数据中找到stats.follower_count字段');
+            console.log('[apify-webhook] LinkedIn数据可用字段:', Object.keys(firstItem));
           }
         } else {
           console.warn('[apify-webhook] LinkedIn数据集为空');
         }
       } else if (platform === 'twitter') {
+        console.log(`[apify-webhook] 处理Twitter平台数据，数据项数量: ${items.length}`);
         // 处理Twitter平台数据
         if (items.length > 0) {
           // 从数据中提取followers数量
@@ -218,11 +230,16 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
             console.log(`[apify-webhook] 提取到Twitter粉丝数: ${fans_count}`);
           } else {
             console.warn('[apify-webhook] 未在Twitter数据中找到author.followers字段');
+            console.log('[apify-webhook] Twitter数据可用字段:', Object.keys(firstItem));
+            if (firstItem.author) {
+              console.log('[apify-webhook] Twitter author字段:', Object.keys(firstItem.author));
+            }
           }
         } else {
           console.warn('[apify-webhook] Twitter数据集为空');
         }
       } else if (platform === 'youtube') {
+        console.log(`[apify-webhook] 处理YouTube平台数据，数据项数量: ${items.length}`);
         // 处理YouTube平台数据
         if (items.length > 0) {
           // 从数据中提取subscribers数量
@@ -259,6 +276,7 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
             console.log(`[apify-webhook] 提取到YouTube订阅者数: ${fans_count}`);
           } else {
             console.warn('[apify-webhook] 未在YouTube数据中找到subscribers数量');
+            console.log('[apify-webhook] YouTube数据可用字段:', Object.keys(firstItem));
           }
         } else {
           console.warn('[apify-webhook] YouTube数据集为空');
@@ -268,7 +286,7 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
       }
       
       // 更新数据库记录
-      console.log(`[apify-webhook] 更新数据库记录: id=${id}, dataset=${datasetJson.length} bytes, fans_count=${fans_count}`);
+      console.log(`[apify-webhook] 准备更新数据库记录: id=${id}, dataset=${datasetJson.length} bytes, fans_count=${fans_count}`);
       
       const { error: updateError } = await supabase
         .from('simple_search_history')
@@ -282,13 +300,15 @@ async function processWebhookDataAsync(webhookData: any, actorRunId: string) {
         
       if (updateError) {
         console.error('[apify-webhook] 更新数据库失败:', updateError);
+        console.error('[apify-webhook] 更新数据库失败详情:', JSON.stringify(updateError));
         return;
       }
       
-      console.log(`[apify-webhook] 成功更新数据库记录`);
+      console.log(`[apify-webhook] 成功更新数据库记录 - fans_count: ${fans_count}`);
       
     } catch (error: any) {
       console.error('[apify-webhook] 处理数据集出错:', error);
+      console.error('[apify-webhook] 错误堆栈:', error.stack);
     }
     
     // 输出成功处理的信息
